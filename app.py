@@ -11,6 +11,9 @@ import base64
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 DB_PATH = os.path.join(os.path.dirname(__file__), "barroquillo.db")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# Render uses postgres:// but psycopg2 needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 USE_POSTGRES = DATABASE_URL.startswith("postgresql")
 BIZ_NAME = "L.E. Barroquillo Funeral Homes"
 BIZ_SHORT = "Barroquillo FH"
