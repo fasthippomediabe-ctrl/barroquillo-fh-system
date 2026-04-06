@@ -652,7 +652,7 @@ ROLE_PAGES = {
     ],
     "manager": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
-        "Inventory", "Suppliers", "Expenses", "Payroll", "Liabilities",
+        "Inventory", "Suppliers", "Expenses", "Liabilities",
         "Service Packages", "Reports",
     ],
     "staff": [
