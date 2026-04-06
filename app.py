@@ -650,6 +650,10 @@ ROLE_PAGES = {
         "Inventory", "Suppliers", "Expenses", "Payroll", "Liabilities",
         "Service Packages", "Reports", "Admin Panel",
     ],
+    "hr": [
+        "Dashboard", "Clients & Deceased", "Services", "Payments",
+        "Inventory", "Expenses", "Payroll", "Reports",
+    ],
     "manager": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
         "Inventory", "Suppliers", "Expenses", "Liabilities",
@@ -3049,7 +3053,7 @@ elif page == "Admin Panel":
                         non_admin_users.apply(lambda r: f"{r['display_name']} (@{r['username']}) — {r['role']}", axis=1),
                         non_admin_users["id"]))
                     sel_user = st.selectbox("Select User", list(user_map.keys()), key="role_user")
-                    new_role = st.selectbox("New Role", ["staff", "manager", "admin"], key="new_role")
+                    new_role = st.selectbox("New Role", ["staff", "manager", "hr", "admin"], key="new_role")
                     if st.button("Update Role", key="upd_role"):
                         run_query("UPDATE users SET role=? WHERE id=?",
                                   (new_role, int(user_map[sel_user])), fetch=False)
@@ -3099,13 +3103,14 @@ elif page == "Admin Panel":
             nu_username = st.text_input("Username *", placeholder="e.g., maria")
             nu_password = st.text_input("Password *", type="password")
             nu_password2 = st.text_input("Confirm Password *", type="password")
-            nu_role = st.selectbox("Role", ["staff", "manager", "admin"])
+            nu_role = st.selectbox("Role", ["staff", "manager", "hr", "admin"])
 
             st.markdown("---")
             st.markdown("**Role Permissions:**")
             st.markdown("""
             - **Staff** — Dashboard, Clients, Services, Payments, Inventory
-            - **Manager** — Everything except Admin Panel
+            - **Manager** — Everything except Payroll & Admin Panel
+            - **HR** — Dashboard, Clients, Services, Payments, Inventory, Expenses, Payroll, Reports
             - **Admin** — Full access + user management
             """)
 
