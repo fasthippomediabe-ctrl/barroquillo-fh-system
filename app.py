@@ -154,6 +154,7 @@ def init_db():
             deceased_first_name TEXT NOT NULL,
             deceased_last_name TEXT NOT NULL,
             deceased_middle_name TEXT,
+            deceased_birthday TEXT,
             deceased_age INTEGER,
             deceased_gender TEXT,
             deceased_date_of_death TEXT,
@@ -1007,7 +1008,9 @@ elif page == "Clients & Deceased":
                 d_lname = st.text_input("Last Name *")
                 d_mname = st.text_input("Middle Name")
             with d2:
-                d_age = st.number_input("Age", min_value=0, max_value=150, value=0)
+                d_bday = st.date_input("Birthday", value=None, key="dob")
+                d_age = st.number_input("Age", min_value=0, max_value=150, value=0,
+                                         help="Auto-calculated if birthday is set")
                 d_gender = st.selectbox("Gender", ["Male", "Female"])
                 d_dod = st.date_input("Date of Death", date.today(), key="dod")
             with d3:
@@ -1029,14 +1032,19 @@ elif page == "Clients & Deceased":
 
             if st.form_submit_button("Save Record", type="primary", use_container_width=True):
                 if d_fname and d_lname and c_name:
+                    # Auto-calculate age from birthday if provided
+                    calc_age = d_age
+                    if d_bday and calc_age == 0:
+                        calc_age = d_dod.year - d_bday.year - ((d_dod.month, d_dod.day) < (d_bday.month, d_bday.day))
                     run_insert("""
                         INSERT INTO clients (deceased_first_name, deceased_last_name, deceased_middle_name,
-                            deceased_age, deceased_gender, deceased_date_of_death, deceased_cause_of_death,
-                            deceased_address, contact_name, contact_relationship, contact_phone,
-                            contact_email, contact_address, notes)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            deceased_birthday, deceased_age, deceased_gender, deceased_date_of_death,
+                            deceased_cause_of_death, deceased_address, contact_name, contact_relationship,
+                            contact_phone, contact_email, contact_address, notes)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (d_fname.strip().title(), d_lname.strip().title(), d_mname.strip().title() if d_mname else None,
-                          d_age if d_age > 0 else None, d_gender, d_dod.isoformat(), d_cause,
+                          d_bday.isoformat() if d_bday else None,
+                          calc_age if calc_age > 0 else None, d_gender, d_dod.isoformat(), d_cause,
                           d_address, c_name.strip().title(), c_rel, c_phone, c_email, c_address, c_notes))
                     st.success(f"Record saved for {d_fname} {d_lname}")
                     st.rerun()
@@ -1079,6 +1087,7 @@ elif page == "Clients & Deceased":
                     with dc1:
                         st.markdown("**Deceased:**")
                         st.markdown(f"- Name: {r['deceased_first_name']} {r.get('deceased_middle_name') or ''} {r['deceased_last_name']}")
+                        st.markdown(f"- Birthday: {r.get('deceased_birthday') or 'N/A'}")
                         st.markdown(f"- Age: {r['deceased_age'] or 'N/A'} | Gender: {r['deceased_gender'] or 'N/A'}")
                         st.markdown(f"- Date of Death: {r['deceased_date_of_death'] or 'N/A'}")
                         st.markdown(f"- Cause: {r['deceased_cause_of_death'] or 'N/A'}")
@@ -1120,6 +1129,7 @@ elif page == "Clients & Deceased":
                         <div class="row">
                             <div class="col">
                                 <div class="label">Full Name</div><div class="value">{full_name}</div>
+                                <div class="label">Birthday</div><div class="value">{r.get('deceased_birthday') or 'N/A'}</div>
                                 <div class="label">Age</div><div class="value">{r['deceased_age'] or 'N/A'}</div>
                                 <div class="label">Gender</div><div class="value">{r['deceased_gender'] or 'N/A'}</div>
                                 <div class="label">Date of Death</div><div class="value">{r['deceased_date_of_death'] or 'N/A'}</div>
