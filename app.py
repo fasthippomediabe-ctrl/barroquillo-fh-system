@@ -159,6 +159,13 @@ def _sql(query):
     return query
 
 
+def _pg(query):
+    """Convert SQLite ? placeholders to PostgreSQL %s."""
+    if USE_POSTGRES:
+        return query.replace("?", "%s")
+    return query
+
+
 def init_db():
     conn = get_db()
     c = conn.cursor()
@@ -558,11 +565,6 @@ init_db()
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
-def _pg(query):
-    """Convert SQLite ? placeholders to PostgreSQL %s."""
-    if USE_POSTGRES:
-        return query.replace("?", "%s")
-    return query
 
 
 def run_query(query, params=(), fetch=True):
