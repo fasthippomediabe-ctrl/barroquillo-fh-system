@@ -10,6 +10,8 @@ import base64
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 DB_PATH = os.path.join(os.path.dirname(__file__), "barroquillo.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+USE_POSTGRES = DATABASE_URL.startswith("postgresql")
 BIZ_NAME = "L.E. Barroquillo Funeral Homes"
 BIZ_SHORT = "Barroquillo FH"
 
@@ -136,10 +138,25 @@ st.markdown("""
 
 # ─── DATABASE ─────────────────────────────────────────────────────────────────
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+    if USE_POSTGRES:
+        import psycopg2
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.autocommit = False
+        return conn
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
+
+def _sql(query):
+    """Convert SQLite SQL to PostgreSQL if needed."""
+    if USE_POSTGRES:
+        query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+        query = query.replace("AUTOINCREMENT", "")
+        query = query.replace("DEFAULT CURRENT_TIMESTAMP", "DEFAULT NOW()")
+    return query
 
 
 def init_db():
@@ -147,7 +164,7 @@ def init_db():
     c = conn.cursor()
 
     # Clients = the family / contact person arranging the service
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS clients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             -- Deceased info
@@ -170,10 +187,10 @@ def init_db():
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """))
 
     # Service packages (templates)
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS service_packages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -181,10 +198,10 @@ def init_db():
             base_price REAL NOT NULL DEFAULT 0,
             is_active INTEGER DEFAULT 1
         )
-    """)
+    """))
 
     # Service records — links a client to a service, tracks status
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS services (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_id INTEGER NOT NULL,
@@ -205,10 +222,10 @@ def init_db():
             FOREIGN KEY (client_id) REFERENCES clients(id),
             FOREIGN KEY (package_id) REFERENCES service_packages(id)
         )
-    """)
+    """))
 
     # Payments from clients
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             service_id INTEGER NOT NULL,
@@ -220,10 +237,10 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (service_id) REFERENCES services(id)
         )
-    """)
+    """))
 
     # Bank / cash accounts
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -233,20 +250,20 @@ def init_db():
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """))
 
     # Expense categories
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS expense_categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             color TEXT DEFAULT '#6c757d',
             is_active INTEGER DEFAULT 1
         )
-    """)
+    """))
 
     # Business expenses
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS expenses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
@@ -261,10 +278,10 @@ def init_db():
             FOREIGN KEY (account_id) REFERENCES accounts(id),
             FOREIGN KEY (service_id) REFERENCES services(id)
         )
-    """)
+    """))
 
     # Liabilities
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS liabilities (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -279,9 +296,9 @@ def init_db():
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """))
 
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS liability_payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             liability_id INTEGER NOT NULL,
@@ -291,19 +308,19 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (liability_id) REFERENCES liabilities(id)
         )
-    """)
+    """))
 
     # Inventory categories
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS inventory_categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             is_active INTEGER DEFAULT 1
         )
-    """)
+    """))
 
     # Inventory items
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS inventory (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             category_id INTEGER,
@@ -319,10 +336,10 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (category_id) REFERENCES inventory_categories(id)
         )
-    """)
+    """))
 
     # Inventory movements (stock in / stock out / adjustments)
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS inventory_movements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_id INTEGER NOT NULL,
@@ -337,10 +354,10 @@ def init_db():
             FOREIGN KEY (item_id) REFERENCES inventory(id),
             FOREIGN KEY (service_id) REFERENCES services(id)
         )
-    """)
+    """))
 
     # Suppliers
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS suppliers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             business_name TEXT NOT NULL,
@@ -361,10 +378,10 @@ def init_db():
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """))
 
     # Users (auth)
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
@@ -377,10 +394,10 @@ def init_db():
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """))
 
     # Employees
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
@@ -399,10 +416,10 @@ def init_db():
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """))
 
     # Payroll periods
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS payroll_periods (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             period_name TEXT NOT NULL,
@@ -413,10 +430,10 @@ def init_db():
             notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """))
 
     # Payroll entries (one per employee per period)
-    c.execute("""
+    c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS payroll_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             period_id INTEGER NOT NULL,
@@ -450,7 +467,7 @@ def init_db():
             FOREIGN KEY (period_id) REFERENCES payroll_periods(id),
             FOREIGN KEY (employee_id) REFERENCES employees(id)
         )
-    """)
+    """))
 
     # ─── SEED DATA ────────────────────────────────────────────────────────────
 
@@ -458,7 +475,7 @@ def init_db():
     c.execute("SELECT COUNT(*) FROM users")
     if c.fetchone()[0] == 0:
         admin_hash = hashlib.sha256("admin123".encode()).hexdigest()
-        c.execute("INSERT INTO users (username, password_hash, display_name, role) VALUES (?,?,?,?)",
+        c.execute(_pg("INSERT INTO users (username, password_hash, display_name, role) VALUES (?,?,?,?)"),
                   ("admin", admin_hash, "Administrator", "admin"))
 
     # Service packages
@@ -472,7 +489,7 @@ def init_db():
             ("Chapel Rental Only", "Chapel rental per day (no casket/embalming)", 5000),
             ("Custom", "Custom service — price varies", 0),
         ]
-        c.executemany("INSERT INTO service_packages (name, description, base_price) VALUES (?, ?, ?)", pkgs)
+        c.executemany(_pg("INSERT INTO service_packages (name, description, base_price) VALUES (?, ?, ?)"), pkgs)
 
     # Expense categories
     c.execute("SELECT COUNT(*) FROM expense_categories")
@@ -491,7 +508,7 @@ def init_db():
             ("Marketing", "#2980b9"),
             ("Miscellaneous", "#95a5a6"),
         ]
-        c.executemany("INSERT INTO expense_categories (name, color) VALUES (?, ?)", cats)
+        c.executemany(_pg("INSERT INTO expense_categories (name, color) VALUES (?, ?)"), cats)
 
     # Inventory categories
     c.execute("SELECT COUNT(*) FROM inventory_categories")
@@ -502,16 +519,16 @@ def init_db():
             ("Candles & Lighting",), ("Documents & Forms",), ("Cleaning Supplies",),
             ("Miscellaneous",),
         ]
-        c.executemany("INSERT INTO inventory_categories (name) VALUES (?)", inv_cats)
+        c.executemany(_pg("INSERT INTO inventory_categories (name) VALUES (?)"), inv_cats)
 
     # Default accounts
     c.execute("SELECT COUNT(*) FROM accounts")
     if c.fetchone()[0] == 0:
-        c.execute("INSERT INTO accounts (name, type, description, opening_balance) VALUES (?, ?, ?, ?)",
+        c.execute(_pg("INSERT INTO accounts (name, type, description, opening_balance) VALUES (?, ?, ?, ?)"),
                   ("Main Bank Account", "bank", "Primary business bank account", 0))
-        c.execute("INSERT INTO accounts (name, type, description, opening_balance) VALUES (?, ?, ?, ?)",
+        c.execute(_pg("INSERT INTO accounts (name, type, description, opening_balance) VALUES (?, ?, ?, ?)"),
                   ("Cash on Hand", "cash", "Cash collections", 0))
-        c.execute("INSERT INTO accounts (name, type, description, opening_balance) VALUES (?, ?, ?, ?)",
+        c.execute(_pg("INSERT INTO accounts (name, type, description, opening_balance) VALUES (?, ?, ?, ?)"),
                   ("GCash", "gcash", "GCash account", 0))
 
     conn.commit()
@@ -522,14 +539,23 @@ init_db()
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
+def _pg(query):
+    """Convert SQLite ? placeholders to PostgreSQL %s."""
+    if USE_POSTGRES:
+        return query.replace("?", "%s")
+    return query
+
+
 def run_query(query, params=(), fetch=True):
     conn = get_db()
+    query = _pg(query)
     if fetch:
         df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         return df
     else:
-        conn.execute(query, params)
+        c = conn.cursor()
+        c.execute(query, params)
         conn.commit()
         conn.close()
 
@@ -537,9 +563,15 @@ def run_query(query, params=(), fetch=True):
 def run_insert(query, params=()):
     conn = get_db()
     c = conn.cursor()
-    c.execute(query, params)
+    query = _pg(query)
+    if USE_POSTGRES:
+        query = query.rstrip().rstrip(")") + ") RETURNING id"
+        c.execute(query, params)
+        last_id = c.fetchone()[0]
+    else:
+        c.execute(query, params)
+        last_id = c.lastrowid
     conn.commit()
-    last_id = c.lastrowid
     conn.close()
     return last_id
 
@@ -967,14 +999,15 @@ if page == "Dashboard":
 
     with ch2:
         st.subheader("Revenue vs Expenses (Monthly)")
-        trend = run_query("""
+        _month_fn = "to_char(date::date, 'YYYY-MM')" if USE_POSTGRES else "strftime('%Y-%m', date)"
+        trend = run_query(f"""
             SELECT month, 'Revenue' as type, total FROM (
-                SELECT strftime('%Y-%m', date) as month, SUM(amount) as total FROM payments GROUP BY month
-            )
+                SELECT {_month_fn} as month, SUM(amount) as total FROM payments GROUP BY month
+            ) r
             UNION ALL
             SELECT month, 'Expenses' as type, total FROM (
-                SELECT strftime('%Y-%m', date) as month, SUM(amount) as total FROM expenses GROUP BY month
-            )
+                SELECT {_month_fn} as month, SUM(amount) as total FROM expenses GROUP BY month
+            ) e
             ORDER BY month
         """)
         if len(trend) > 0:
