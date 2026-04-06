@@ -651,8 +651,7 @@ ROLE_PAGES = {
         "Service Packages", "Reports", "Admin Panel",
     ],
     "hr": [
-        "Dashboard", "Clients & Deceased", "Services", "Payments",
-        "Inventory", "Expenses", "Payroll", "Reports",
+        "Dashboard", "Payroll",
     ],
     "manager": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
