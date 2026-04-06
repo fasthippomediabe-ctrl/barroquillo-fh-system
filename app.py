@@ -371,6 +371,9 @@ def init_db():
             password_hash TEXT NOT NULL,
             display_name TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'staff',
+            phone TEXT,
+            email TEXT,
+            profile_pic TEXT,
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -648,18 +651,18 @@ ROLE_PAGES = {
     "admin": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
         "Inventory", "Suppliers", "Expenses", "Payroll", "Liabilities",
-        "Service Packages", "Reports", "Admin Panel",
+        "Service Packages", "Reports", "Admin Panel", "My Profile",
     ],
     "hr": [
-        "Dashboard", "Payroll",
+        "Dashboard", "Payroll", "My Profile",
     ],
     "manager": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
         "Inventory", "Suppliers", "Expenses", "Liabilities",
-        "Service Packages", "Reports",
+        "Service Packages", "Reports", "My Profile",
     ],
     "staff": [
-        "Dashboard", "Clients & Deceased", "Services", "Payments", "Inventory",
+        "Dashboard", "Clients & Deceased", "Services", "Payments", "Inventory", "My Profile",
     ],
 }
 
@@ -729,6 +732,7 @@ PAGE_ICONS = {
     "Service Packages": "📑",
     "Reports": "📈",
     "Admin Panel": "⚙️",
+    "My Profile": "👤",
 }
 
 # ─── SIDEBAR NAV ──────────────────────────────────────────────────────────────
@@ -741,8 +745,11 @@ with st.sidebar:
 
     st.markdown('<hr style="border-color:#1a3a7a; margin:10px 0;">', unsafe_allow_html=True)
 
-    # User info
-    st.markdown('<div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:10px 14px; margin-bottom:5px;"><div style="color:white; font-size:14px; font-weight:600;">' + USER_NAME + '</div><div style="color:#e8872a; font-size:11px;">' + USER_ROLE.title() + '</div></div>', unsafe_allow_html=True)
+    # User info with profile pic
+    _user_pic = run_query("SELECT profile_pic FROM users WHERE id=?", (st.session_state.get("user_id", 0),))
+    _pic_b64 = _user_pic.iloc[0]["profile_pic"] if len(_user_pic) > 0 and _user_pic.iloc[0]["profile_pic"] else None
+    _pic_html = '<img src="data:image/png;base64,' + _pic_b64 + '" style="width:40px;height:40px;border-radius:50%;object-fit:cover;margin-right:10px;border:2px solid #e8872a;">' if _pic_b64 else '<div style="width:40px;height:40px;border-radius:50%;background:#1a4fcf;display:flex;align-items:center;justify-content:center;margin-right:10px;color:white;font-weight:700;font-size:16px;border:2px solid #e8872a;">' + USER_NAME[0].upper() + '</div>'
+    st.markdown('<div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:10px 14px; margin-bottom:5px; display:flex; align-items:center;">' + _pic_html + '<div><div style="color:white; font-size:14px; font-weight:600;">' + USER_NAME + '</div><div style="color:#e8872a; font-size:11px;">' + USER_ROLE.title() + '</div></div></div>', unsafe_allow_html=True)
 
     if st.button("Logout", use_container_width=True):
         for key in list(st.session_state.keys()):
@@ -3145,6 +3152,119 @@ elif page == "Admin Panel":
             if st.form_submit_button("Change Password", type="primary", use_container_width=True):
                 # Verify current password
                 uid = st.session_state.get("user_id")
+                check = run_query("SELECT id FROM users WHERE id=? AND password_hash=?",
+                                  (uid, hash_pw(current_pw)))
+                if len(check) == 0:
+                    st.error("Current password is incorrect.")
+                elif new_pw1 != new_pw2:
+                    st.error("New passwords don't match.")
+                elif len(new_pw1) < 4:
+                    st.error("Password must be at least 4 characters.")
+                else:
+                    run_query("UPDATE users SET password_hash=? WHERE id=?",
+                              (hash_pw(new_pw1), uid), fetch=False)
+                    st.success("Password changed!")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MY PROFILE
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "My Profile":
+    st.title("My Profile")
+    uid = st.session_state.get("user_id")
+
+    my_data = run_query("SELECT * FROM users WHERE id=?", (uid,))
+    if len(my_data) == 0:
+        st.error("User not found.")
+        st.stop()
+
+    me = my_data.iloc[0]
+
+    tab_profile, tab_pic, tab_pw = st.tabs(["Edit Profile", "Profile Picture", "Change Password"])
+
+    with tab_profile:
+        st.subheader("My Information")
+
+        # Show current profile pic
+        if me.get("profile_pic"):
+            st.markdown('<div style="text-align:center;"><img src="data:image/png;base64,' + me["profile_pic"] + '" style="width:120px;height:120px;border-radius:50%;object-fit:cover;border:4px solid #e8872a;"></div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="text-align:center;"><div style="width:120px;height:120px;border-radius:50%;background:#0a1e5e;display:inline-flex;align-items:center;justify-content:center;color:white;font-size:48px;font-weight:700;border:4px solid #e8872a;">' + me["display_name"][0].upper() + '</div></div>', unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        with st.form("edit_profile"):
+            ep1, ep2 = st.columns(2)
+            with ep1:
+                new_name = st.text_input("Display Name", value=me["display_name"])
+                new_phone = st.text_input("Phone", value=me.get("phone") or "")
+            with ep2:
+                new_email = st.text_input("Email", value=me.get("email") or "")
+                st.text_input("Username", value=me["username"], disabled=True)
+                st.text_input("Role", value=me["role"].title(), disabled=True)
+
+            if st.form_submit_button("Save Changes", type="primary", use_container_width=True):
+                if new_name.strip():
+                    run_query("UPDATE users SET display_name=?, phone=?, email=? WHERE id=?",
+                              (new_name.strip(), new_phone, new_email, uid), fetch=False)
+                    st.session_state["display_name"] = new_name.strip()
+                    st.success("Profile updated!")
+                    st.rerun()
+                else:
+                    st.error("Display name is required.")
+
+    with tab_pic:
+        st.subheader("Profile Picture")
+
+        # Show current
+        if me.get("profile_pic"):
+            st.markdown('<div style="text-align:center; margin-bottom:15px;"><img src="data:image/png;base64,' + me["profile_pic"] + '" style="width:150px;height:150px;border-radius:50%;object-fit:cover;border:4px solid #e8872a;"></div>', unsafe_allow_html=True)
+            if st.button("Remove Profile Picture"):
+                run_query("UPDATE users SET profile_pic=NULL WHERE id=?", (uid,), fetch=False)
+                st.success("Picture removed.")
+                st.rerun()
+        else:
+            st.info("No profile picture set.")
+
+        st.markdown("---")
+        uploaded = st.file_uploader("Upload new picture (PNG, JPG)", type=["png", "jpg", "jpeg"], key="profile_upload")
+
+        if uploaded:
+            import base64 as b64mod
+            from PIL import Image
+            try:
+                img = Image.open(uploaded)
+                # Resize to 200x200 max to keep DB small
+                img.thumbnail((200, 200))
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                pic_b64 = b64mod.b64encode(buf.getvalue()).decode()
+
+                # Preview
+                st.markdown('<div style="text-align:center;"><img src="data:image/png;base64,' + pic_b64 + '" style="width:150px;height:150px;border-radius:50%;object-fit:cover;border:4px solid #e8872a;"></div>', unsafe_allow_html=True)
+
+                if st.button("Save Profile Picture", type="primary"):
+                    run_query("UPDATE users SET profile_pic=? WHERE id=?", (pic_b64, uid), fetch=False)
+                    st.success("Profile picture saved!")
+                    st.rerun()
+            except ImportError:
+                # PIL not available, save raw
+                pic_b64 = b64mod.b64encode(uploaded.read()).decode()
+                if st.button("Save Profile Picture", type="primary"):
+                    run_query("UPDATE users SET profile_pic=? WHERE id=?", (pic_b64, uid), fetch=False)
+                    st.success("Profile picture saved!")
+                    st.rerun()
+            except Exception as e:
+                st.error("Error processing image: " + str(e))
+
+    with tab_pw:
+        st.subheader("Change Password")
+        with st.form("my_change_pw"):
+            current_pw = st.text_input("Current Password", type="password", key="mycp")
+            new_pw1 = st.text_input("New Password", type="password", key="mynp1")
+            new_pw2 = st.text_input("Confirm New Password", type="password", key="mynp2")
+
+            if st.form_submit_button("Change Password", type="primary", use_container_width=True):
                 check = run_query("SELECT id FROM users WHERE id=? AND password_hash=?",
                                   (uid, hash_pw(current_pw)))
                 if len(check) == 0:
