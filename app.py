@@ -2037,32 +2037,74 @@ elif page == "Payroll":
 
     # ── EMPLOYEES TAB ──
     with tab_employees:
-        emps = run_query("SELECT * FROM employees WHERE is_active=1 ORDER BY last_name, first_name")
+        show_inactive = st.checkbox("Show inactive/separated employees", key="show_inactive_emp")
+        if show_inactive:
+            emps = run_query("SELECT * FROM employees ORDER BY is_active DESC, last_name, first_name")
+        else:
+            emps = run_query("SELECT * FROM employees WHERE is_active=1 ORDER BY last_name, first_name")
+
         if len(emps) > 0:
-            st.caption(str(len(emps)) + " active employees")
+            active_count = len(emps[emps["is_active"] == 1])
+            inactive_count = len(emps[emps["is_active"] == 0])
+            st.caption(str(active_count) + " active" + (", " + str(inactive_count) + " inactive" if show_inactive and inactive_count > 0 else ""))
+
             for _, emp in emps.iterrows():
-                rate_label = fmt(emp["rate_amount"]) + "/" + ("mo" if emp["rate_type"] == "monthly" else "day")
-                with st.expander(emp["last_name"] + ", " + emp["first_name"] + " — " + (emp["position"] or "Staff") + " | " + rate_label):
+                rate_label = fmt(emp["rate_amount"]) + "/" + ("mo" if emp.get("rate_type") == "monthly" else "day")
+                status_icon = "🟢" if emp["is_active"] else "🔴"
+                with st.expander(status_icon + " " + emp["last_name"] + ", " + emp["first_name"] + " — " + (emp.get("position") or "Staff") + " | " + rate_label):
+                    # Photo
+                    if emp.get("photo"):
+                        st.markdown('<div style="text-align:center; margin-bottom:10px;"><img src="data:image/png;base64,' + emp["photo"] + '" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e8872a;"></div>', unsafe_allow_html=True)
+
                     ec1, ec2 = st.columns(2)
                     with ec1:
                         st.markdown("**Personal Info**")
                         st.markdown("- **Name:** " + emp["first_name"] + " " + emp["last_name"])
-                        st.markdown("- **Position:** " + (emp["position"] or "N/A"))
-                        st.markdown("- **Type:** " + (emp["employment_type"] or "Regular").title())
+                        st.markdown("- **Position:** " + (emp.get("position") or "N/A"))
+                        st.markdown("- **Type:** " + (emp.get("employment_type") or "Regular").title())
                         st.markdown("- **Rate:** " + rate_label)
-                        st.markdown("- **Phone:** " + (emp["phone"] or "N/A"))
-                        st.markdown("- **Date Hired:** " + (emp["date_hired"] or "N/A"))
+                        st.markdown("- **Phone:** " + (emp.get("phone") or "N/A"))
+                        st.markdown("- **Date Hired:** " + (emp.get("date_hired") or "N/A"))
                     with ec2:
                         st.markdown("**Government IDs**")
-                        st.markdown("- **SSS:** " + (emp["sss_number"] or "N/A"))
-                        st.markdown("- **PhilHealth:** " + (emp["philhealth_number"] or "N/A"))
-                        st.markdown("- **Pag-IBIG:** " + (emp["pagibig_number"] or "N/A"))
-                        st.markdown("- **TIN:** " + (emp["tin_number"] or "N/A"))
-                        st.markdown("- **Address:** " + (emp["address"] or "N/A"))
+                        st.markdown("- **SSS:** " + (emp.get("sss_number") or "N/A"))
+                        st.markdown("- **PhilHealth:** " + (emp.get("philhealth_number") or "N/A"))
+                        st.markdown("- **Pag-IBIG:** " + (emp.get("pagibig_number") or "N/A"))
+                        st.markdown("- **TIN:** " + (emp.get("tin_number") or "N/A"))
+                        st.markdown("- **Address:** " + (emp.get("address") or "N/A"))
 
-                    if st.button("Deactivate Employee", key="deact_emp_" + str(emp["id"])):
-                        run_query("UPDATE employees SET is_active=0 WHERE id=?", (int(emp["id"]),), fetch=False)
-                        st.success("Employee deactivated."); st.rerun()
+                    # Action buttons
+                    btn1, btn2, btn3 = st.columns(3)
+                    with btn1:
+                        if emp["is_active"]:
+                            if st.button("Deactivate", key="deact_emp_" + str(emp["id"])):
+                                run_query("UPDATE employees SET is_active=0, date_separated=? WHERE id=?",
+                                          (date.today().isoformat(), int(emp["id"])), fetch=False)
+                                st.success("Employee deactivated."); st.rerun()
+                        else:
+                            if st.button("Reactivate", key="react_emp_" + str(emp["id"])):
+                                run_query("UPDATE employees SET is_active=1, date_separated=NULL, separation_reason=NULL WHERE id=?",
+                                          (int(emp["id"]),), fetch=False)
+                                st.success("Employee reactivated."); st.rerun()
+                    with btn2:
+                        if not emp["is_active"]:
+                            if st.button("Delete Permanently", key="del_emp_" + str(emp["id"])):
+                                st.session_state["confirm_del_emp_" + str(emp["id"])] = True
+
+                    # Confirm delete
+                    if st.session_state.get("confirm_del_emp_" + str(emp["id"])):
+                        st.warning("Are you sure? This will permanently delete " + emp["first_name"] + " " + emp["last_name"] + " and all their payroll records.")
+                        cd1, cd2 = st.columns(2)
+                        with cd1:
+                            if st.button("Yes, Delete", key="confirm_yes_" + str(emp["id"])):
+                                run_query("DELETE FROM payroll_entries WHERE employee_id=?", (int(emp["id"]),), fetch=False)
+                                run_query("DELETE FROM employees WHERE id=?", (int(emp["id"]),), fetch=False)
+                                st.session_state.pop("confirm_del_emp_" + str(emp["id"]), None)
+                                st.success("Employee deleted."); st.rerun()
+                        with cd2:
+                            if st.button("Cancel", key="confirm_no_" + str(emp["id"])):
+                                st.session_state.pop("confirm_del_emp_" + str(emp["id"]), None)
+                                st.rerun()
         else:
             st.info("No employees. Add one in the **Add Employee** tab.")
 
