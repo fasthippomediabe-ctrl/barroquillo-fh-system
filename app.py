@@ -561,7 +561,12 @@ def init_db():
     conn.close()
 
 
-init_db()
+try:
+    init_db()
+except Exception as _init_err:
+    st.error("Database init error: " + str(_init_err))
+    import traceback
+    st.code(traceback.format_exc())
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -586,9 +591,13 @@ def run_insert(query, params=()):
     c = conn.cursor()
     query = _pg(query)
     if USE_POSTGRES:
-        query = query.rstrip().rstrip(")") + ") RETURNING id"
-        c.execute(query, params)
-        last_id = c.fetchone()[0]
+        # Add RETURNING id to get the inserted row's id
+        q = query.rstrip().rstrip(";")
+        if "RETURNING" not in q.upper():
+            q += " RETURNING id"
+        c.execute(q, params)
+        result = c.fetchone()
+        last_id = result[0] if result else 0
     else:
         c.execute(query, params)
         last_id = c.lastrowid
