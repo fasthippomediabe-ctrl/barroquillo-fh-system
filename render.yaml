@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: barroquillo-fh
+    runtime: docker
+    plan: free
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: "true"
