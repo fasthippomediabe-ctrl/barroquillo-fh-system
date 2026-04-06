@@ -375,6 +375,79 @@ def init_db():
         )
     """)
 
+    # Employees
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            position TEXT,
+            employment_type TEXT DEFAULT 'regular',
+            rate_type TEXT DEFAULT 'monthly',
+            rate_amount REAL NOT NULL DEFAULT 0,
+            phone TEXT,
+            address TEXT,
+            sss_number TEXT,
+            philhealth_number TEXT,
+            pagibig_number TEXT,
+            tin_number TEXT,
+            date_hired TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Payroll periods
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS payroll_periods (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            period_name TEXT NOT NULL,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            pay_date TEXT,
+            status TEXT DEFAULT 'draft',
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Payroll entries (one per employee per period)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS payroll_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            period_id INTEGER NOT NULL,
+            employee_id INTEGER NOT NULL,
+            -- Earnings
+            basic_pay REAL DEFAULT 0,
+            overtime_pay REAL DEFAULT 0,
+            holiday_pay REAL DEFAULT 0,
+            bonus REAL DEFAULT 0,
+            other_earnings REAL DEFAULT 0,
+            other_earnings_note TEXT,
+            -- Deductions
+            sss REAL DEFAULT 0,
+            philhealth REAL DEFAULT 0,
+            pagibig REAL DEFAULT 0,
+            tax REAL DEFAULT 0,
+            cash_advance REAL DEFAULT 0,
+            absences REAL DEFAULT 0,
+            late_deductions REAL DEFAULT 0,
+            other_deductions REAL DEFAULT 0,
+            other_deductions_note TEXT,
+            -- Computed
+            gross_pay REAL DEFAULT 0,
+            total_deductions REAL DEFAULT 0,
+            net_pay REAL DEFAULT 0,
+            -- Status
+            is_paid INTEGER DEFAULT 0,
+            paid_via TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (period_id) REFERENCES payroll_periods(id),
+            FOREIGN KEY (employee_id) REFERENCES employees(id)
+        )
+    """)
+
     # ─── SEED DATA ────────────────────────────────────────────────────────────
 
     # Default admin user (password: admin123 — change after first login!)
@@ -573,12 +646,12 @@ def df_to_html_table(df):
 ROLE_PAGES = {
     "admin": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
-        "Inventory", "Suppliers", "Expenses", "Liabilities",
+        "Inventory", "Suppliers", "Expenses", "Payroll", "Liabilities",
         "Service Packages", "Reports", "Admin Panel",
     ],
     "manager": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
-        "Inventory", "Suppliers", "Expenses", "Liabilities",
+        "Inventory", "Suppliers", "Expenses", "Payroll", "Liabilities",
         "Service Packages", "Reports",
     ],
     "staff": [
@@ -647,6 +720,7 @@ PAGE_ICONS = {
     "Inventory": "📦",
     "Suppliers": "🏪",
     "Expenses": "💸",
+    "Payroll": "💰",
     "Liabilities": "📋",
     "Service Packages": "📑",
     "Reports": "📈",
@@ -1698,6 +1772,355 @@ elif page == "Expenses":
                         st.rerun()
                 else:
                     st.error("Name required.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PAYROLL
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "Payroll":
+    st.title("Payroll")
+    tab_employees, tab_add_emp, tab_run_payroll, tab_history, tab_payslip = st.tabs([
+        "Employees", "Add Employee", "Run Payroll", "Payroll History", "Payslips"])
+
+    # ── EMPLOYEES TAB ──
+    with tab_employees:
+        emps = run_query("SELECT * FROM employees WHERE is_active=1 ORDER BY last_name, first_name")
+        if len(emps) > 0:
+            st.caption(str(len(emps)) + " active employees")
+            for _, emp in emps.iterrows():
+                rate_label = fmt(emp["rate_amount"]) + "/" + ("mo" if emp["rate_type"] == "monthly" else "day")
+                with st.expander(emp["last_name"] + ", " + emp["first_name"] + " — " + (emp["position"] or "Staff") + " | " + rate_label):
+                    ec1, ec2 = st.columns(2)
+                    with ec1:
+                        st.markdown("**Personal Info**")
+                        st.markdown("- **Name:** " + emp["first_name"] + " " + emp["last_name"])
+                        st.markdown("- **Position:** " + (emp["position"] or "N/A"))
+                        st.markdown("- **Type:** " + (emp["employment_type"] or "Regular").title())
+                        st.markdown("- **Rate:** " + rate_label)
+                        st.markdown("- **Phone:** " + (emp["phone"] or "N/A"))
+                        st.markdown("- **Date Hired:** " + (emp["date_hired"] or "N/A"))
+                    with ec2:
+                        st.markdown("**Government IDs**")
+                        st.markdown("- **SSS:** " + (emp["sss_number"] or "N/A"))
+                        st.markdown("- **PhilHealth:** " + (emp["philhealth_number"] or "N/A"))
+                        st.markdown("- **Pag-IBIG:** " + (emp["pagibig_number"] or "N/A"))
+                        st.markdown("- **TIN:** " + (emp["tin_number"] or "N/A"))
+                        st.markdown("- **Address:** " + (emp["address"] or "N/A"))
+
+                    if st.button("Deactivate Employee", key="deact_emp_" + str(emp["id"])):
+                        run_query("UPDATE employees SET is_active=0 WHERE id=?", (int(emp["id"]),), fetch=False)
+                        st.success("Employee deactivated."); st.rerun()
+        else:
+            st.info("No employees. Add one in the **Add Employee** tab.")
+
+    # ── ADD EMPLOYEE TAB ──
+    with tab_add_emp:
+        with st.form("add_employee", clear_on_submit=True):
+            st.subheader("New Employee")
+            ae1, ae2 = st.columns(2)
+            with ae1:
+                emp_fname = st.text_input("First Name *")
+                emp_lname = st.text_input("Last Name *")
+                emp_position = st.text_input("Position", placeholder="e.g., Embalmer, Driver, Chapel Staff")
+                emp_type = st.selectbox("Employment Type", ["regular", "contractual", "part_time"])
+                emp_rate_type = st.selectbox("Rate Type", ["monthly", "daily"])
+                emp_rate = st.number_input("Rate Amount (₱) *", min_value=0.0, step=100.0, format="%.2f")
+            with ae2:
+                emp_phone = st.text_input("Phone")
+                emp_address = st.text_area("Address", height=68)
+                emp_sss = st.text_input("SSS Number")
+                emp_philhealth = st.text_input("PhilHealth Number")
+                emp_pagibig = st.text_input("Pag-IBIG Number")
+                emp_tin = st.text_input("TIN")
+            emp_hired = st.date_input("Date Hired", value=None, key="emp_hired")
+
+            if st.form_submit_button("Save Employee", type="primary", use_container_width=True):
+                if emp_fname and emp_lname and emp_rate > 0:
+                    run_insert("""
+                        INSERT INTO employees (first_name, last_name, position, employment_type,
+                            rate_type, rate_amount, phone, address, sss_number, philhealth_number,
+                            pagibig_number, tin_number, date_hired)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (emp_fname.strip().title(), emp_lname.strip().title(), emp_position,
+                          emp_type, emp_rate_type, emp_rate, emp_phone, emp_address,
+                          emp_sss, emp_philhealth, emp_pagibig, emp_tin,
+                          emp_hired.isoformat() if emp_hired else None))
+                    st.success("Employee added!"); st.rerun()
+                else:
+                    st.error("Fill in First Name, Last Name, and Rate.")
+
+    # ── RUN PAYROLL TAB ──
+    with tab_run_payroll:
+        st.subheader("Run Payroll")
+
+        active_emps = run_query("SELECT id, first_name, last_name, position, rate_type, rate_amount FROM employees WHERE is_active=1 ORDER BY last_name")
+
+        if len(active_emps) == 0:
+            st.info("Add employees first.")
+        else:
+            with st.form("run_payroll_form"):
+                st.markdown("**Pay Period**")
+                rp1, rp2, rp3 = st.columns(3)
+                with rp1:
+                    period_name = st.text_input("Period Name *", placeholder="e.g., April 1-15, 2026")
+                with rp2:
+                    period_start = st.date_input("Start Date", date.today().replace(day=1), key="pp_start")
+                with rp3:
+                    period_end = st.date_input("End Date", date.today(), key="pp_end")
+
+                pay_date = st.date_input("Pay Date", date.today(), key="pp_paydate")
+
+                st.markdown("---")
+                st.markdown("**Employee Earnings & Deductions**")
+                st.caption("Fill in for each employee. Basic pay is auto-calculated from rate.")
+
+                payroll_data = {}
+                for _, emp in active_emps.iterrows():
+                    eid = int(emp["id"])
+                    name = emp["last_name"] + ", " + emp["first_name"]
+                    rate_info = fmt(emp["rate_amount"]) + "/" + ("mo" if emp["rate_type"] == "monthly" else "day")
+
+                    with st.expander(name + " — " + (emp["position"] or "Staff") + " | " + rate_info):
+                        # Auto-calc basic pay
+                        if emp["rate_type"] == "monthly":
+                            default_basic = float(emp["rate_amount"])
+                        else:
+                            days_in_period = (period_end - period_start).days + 1
+                            work_days = min(days_in_period, 26)  # approx work days
+                            default_basic = float(emp["rate_amount"]) * work_days
+
+                        pc1, pc2 = st.columns(2)
+                        with pc1:
+                            st.markdown("**Earnings**")
+                            basic = st.number_input("Basic Pay (₱)", value=default_basic, step=100.0, format="%.2f", key="basic_" + str(eid))
+                            ot = st.number_input("Overtime (₱)", value=0.0, step=50.0, format="%.2f", key="ot_" + str(eid))
+                            holiday = st.number_input("Holiday Pay (₱)", value=0.0, step=50.0, format="%.2f", key="hol_" + str(eid))
+                            bonus = st.number_input("Bonus (₱)", value=0.0, step=100.0, format="%.2f", key="bonus_" + str(eid))
+                            other_earn = st.number_input("Other Earnings (₱)", value=0.0, step=50.0, format="%.2f", key="oear_" + str(eid))
+                            other_earn_note = st.text_input("Other Earnings Note", key="oearn_" + str(eid))
+                        with pc2:
+                            st.markdown("**Deductions**")
+                            d_sss = st.number_input("SSS (₱)", value=0.0, step=10.0, format="%.2f", key="sss_" + str(eid))
+                            d_phil = st.number_input("PhilHealth (₱)", value=0.0, step=10.0, format="%.2f", key="phil_" + str(eid))
+                            d_pag = st.number_input("Pag-IBIG (₱)", value=0.0, step=10.0, format="%.2f", key="pag_" + str(eid))
+                            d_tax = st.number_input("Tax (₱)", value=0.0, step=10.0, format="%.2f", key="tax_" + str(eid))
+                            d_ca = st.number_input("Cash Advance (₱)", value=0.0, step=100.0, format="%.2f", key="ca_" + str(eid))
+                            d_abs = st.number_input("Absences (₱)", value=0.0, step=50.0, format="%.2f", key="abs_" + str(eid))
+                            d_late = st.number_input("Late Deductions (₱)", value=0.0, step=10.0, format="%.2f", key="late_" + str(eid))
+                            d_other = st.number_input("Other Deductions (₱)", value=0.0, step=50.0, format="%.2f", key="oded_" + str(eid))
+                            d_other_note = st.text_input("Other Deductions Note", key="odedn_" + str(eid))
+
+                        gross = basic + ot + holiday + bonus + other_earn
+                        total_ded = d_sss + d_phil + d_pag + d_tax + d_ca + d_abs + d_late + d_other
+                        net = gross - total_ded
+
+                        st.markdown("**Gross:** " + fmt(gross) + " | **Deductions:** " + fmt(total_ded) + " | **Net Pay:** " + fmt(net))
+
+                        payroll_data[eid] = {
+                            "basic": basic, "ot": ot, "holiday": holiday, "bonus": bonus,
+                            "other_earn": other_earn, "other_earn_note": other_earn_note,
+                            "sss": d_sss, "phil": d_phil, "pag": d_pag, "tax": d_tax,
+                            "ca": d_ca, "abs": d_abs, "late": d_late,
+                            "other_ded": d_other, "other_ded_note": d_other_note,
+                            "gross": gross, "total_ded": total_ded, "net": net,
+                        }
+
+                if st.form_submit_button("Process Payroll", type="primary", use_container_width=True):
+                    if not period_name:
+                        st.error("Enter a period name.")
+                    else:
+                        # Create period
+                        pid = run_insert(
+                            "INSERT INTO payroll_periods (period_name, start_date, end_date, pay_date, status) VALUES (?,?,?,?,?)",
+                            (period_name, period_start.isoformat(), period_end.isoformat(),
+                             pay_date.isoformat(), "processed"))
+
+                        # Insert entries
+                        for eid, d in payroll_data.items():
+                            run_insert("""
+                                INSERT INTO payroll_entries (period_id, employee_id, basic_pay, overtime_pay,
+                                    holiday_pay, bonus, other_earnings, other_earnings_note,
+                                    sss, philhealth, pagibig, tax, cash_advance, absences,
+                                    late_deductions, other_deductions, other_deductions_note,
+                                    gross_pay, total_deductions, net_pay)
+                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            """, (pid, eid, d["basic"], d["ot"], d["holiday"], d["bonus"],
+                                  d["other_earn"], d["other_earn_note"],
+                                  d["sss"], d["phil"], d["pag"], d["tax"], d["ca"], d["abs"],
+                                  d["late"], d["other_ded"], d["other_ded_note"],
+                                  d["gross"], d["total_ded"], d["net"]))
+
+                        st.success("Payroll processed for " + period_name + "!")
+                        st.rerun()
+
+    # ── PAYROLL HISTORY TAB ──
+    with tab_history:
+        st.subheader("Payroll History")
+        periods = run_query("SELECT * FROM payroll_periods ORDER BY start_date DESC")
+
+        if len(periods) > 0:
+            for _, per in periods.iterrows():
+                entries = run_query("""
+                    SELECT e.first_name || ' ' || e.last_name as employee, e.position,
+                           pe.basic_pay, pe.overtime_pay, pe.holiday_pay, pe.bonus, pe.other_earnings,
+                           pe.gross_pay, pe.sss, pe.philhealth, pe.pagibig, pe.tax,
+                           pe.cash_advance, pe.absences, pe.late_deductions, pe.other_deductions,
+                           pe.total_deductions, pe.net_pay, pe.is_paid
+                    FROM payroll_entries pe
+                    JOIN employees e ON pe.employee_id = e.id
+                    WHERE pe.period_id = ?
+                    ORDER BY e.last_name
+                """, (int(per["id"]),))
+
+                total_gross = entries["gross_pay"].sum() if len(entries) > 0 else 0
+                total_net = entries["net_pay"].sum() if len(entries) > 0 else 0
+                total_ded = entries["total_deductions"].sum() if len(entries) > 0 else 0
+
+                with st.expander(per["period_name"] + " | " + per["start_date"] + " to " + per["end_date"] + " | Net: " + fmt(total_net)):
+                    hm1, hm2, hm3, hm4 = st.columns(4)
+                    hm1.metric("Employees", len(entries))
+                    hm2.metric("Gross", fmt(total_gross))
+                    hm3.metric("Deductions", fmt(total_ded))
+                    hm4.metric("Net Payroll", fmt(total_net))
+
+                    if len(entries) > 0:
+                        display_entries = entries.copy()
+                        for col in ["basic_pay", "overtime_pay", "gross_pay", "total_deductions", "net_pay"]:
+                            display_entries[col] = display_entries[col].apply(fmt)
+                        st.dataframe(
+                            display_entries[["employee", "position", "basic_pay", "overtime_pay", "gross_pay", "total_deductions", "net_pay"]],
+                            use_container_width=True, hide_index=True)
+
+                    # Print payroll summary
+                    if st.button("Print Payroll Summary", key="print_pr_" + str(per["id"])):
+                        body = '<p><strong>Period:</strong> ' + per["period_name"] + ' (' + per["start_date"] + ' to ' + per["end_date"] + ')</p>'
+                        body += '<p><strong>Employees:</strong> ' + str(len(entries)) + ' | <strong>Gross:</strong> ' + fmt(total_gross) + ' | <strong>Deductions:</strong> ' + fmt(total_ded) + ' | <strong>Net:</strong> ' + fmt(total_net) + '</p>'
+                        if len(entries) > 0:
+                            pr_df = entries[["employee", "position", "basic_pay", "overtime_pay", "holiday_pay", "bonus", "gross_pay", "sss", "philhealth", "pagibig", "tax", "cash_advance", "absences", "total_deductions", "net_pay"]].copy()
+                            for col in pr_df.columns:
+                                if pr_df[col].dtype in ["float64", "int64"]:
+                                    pr_df[col] = pr_df[col].apply(fmt)
+                            body += df_to_html_table(pr_df)
+                        print_html("Payroll Summary — " + per["period_name"], body)
+        else:
+            st.info("No payroll records yet. Run payroll in the **Run Payroll** tab.")
+
+    # ── PAYSLIPS TAB ──
+    with tab_payslip:
+        st.subheader("Generate Payslip")
+
+        periods_df = run_query("SELECT id, period_name, start_date, end_date FROM payroll_periods ORDER BY start_date DESC")
+        emps_df = run_query("SELECT id, first_name, last_name FROM employees WHERE is_active=1 ORDER BY last_name")
+
+        if len(periods_df) == 0 or len(emps_df) == 0:
+            st.info("Run payroll first to generate payslips.")
+        else:
+            ps1, ps2 = st.columns(2)
+            with ps1:
+                per_map = dict(zip(
+                    periods_df.apply(lambda r: r["period_name"] + " (" + r["start_date"] + " to " + r["end_date"] + ")", axis=1),
+                    periods_df["id"]))
+                sel_period = st.selectbox("Pay Period", list(per_map.keys()))
+            with ps2:
+                emp_map = dict(zip(
+                    emps_df.apply(lambda r: r["last_name"] + ", " + r["first_name"], axis=1),
+                    emps_df["id"]))
+                sel_emp = st.selectbox("Employee", list(emp_map.keys()))
+
+            if st.button("Generate Payslip", type="primary", use_container_width=True):
+                pid = int(per_map[sel_period])
+                eid = int(emp_map[sel_emp])
+
+                entry = run_query("""
+                    SELECT pe.*, e.first_name, e.last_name, e.position, e.rate_type, e.rate_amount,
+                           e.sss_number, e.philhealth_number, e.pagibig_number, e.tin_number,
+                           pp.period_name, pp.start_date, pp.end_date, pp.pay_date
+                    FROM payroll_entries pe
+                    JOIN employees e ON pe.employee_id = e.id
+                    JOIN payroll_periods pp ON pe.period_id = pp.id
+                    WHERE pe.period_id = ? AND pe.employee_id = ?
+                """, (pid, eid))
+
+                if len(entry) == 0:
+                    st.warning("No payroll entry found for this employee in this period.")
+                else:
+                    e = entry.iloc[0]
+                    emp_name = e["first_name"] + " " + e["last_name"]
+
+                    # Display payslip
+                    st.markdown("---")
+                    st.markdown("### Payslip: " + emp_name)
+                    st.caption(e["period_name"] + " | " + e["start_date"] + " to " + e["end_date"])
+
+                    ps_c1, ps_c2 = st.columns(2)
+                    with ps_c1:
+                        st.markdown("**Earnings**")
+                        st.markdown("- Basic Pay: " + fmt(e["basic_pay"]))
+                        if e["overtime_pay"] > 0: st.markdown("- Overtime: " + fmt(e["overtime_pay"]))
+                        if e["holiday_pay"] > 0: st.markdown("- Holiday Pay: " + fmt(e["holiday_pay"]))
+                        if e["bonus"] > 0: st.markdown("- Bonus: " + fmt(e["bonus"]))
+                        if e["other_earnings"] > 0: st.markdown("- Other: " + fmt(e["other_earnings"]) + (" (" + e["other_earnings_note"] + ")" if e["other_earnings_note"] else ""))
+                        st.markdown("**Gross Pay: " + fmt(e["gross_pay"]) + "**")
+                    with ps_c2:
+                        st.markdown("**Deductions**")
+                        if e["sss"] > 0: st.markdown("- SSS: " + fmt(e["sss"]))
+                        if e["philhealth"] > 0: st.markdown("- PhilHealth: " + fmt(e["philhealth"]))
+                        if e["pagibig"] > 0: st.markdown("- Pag-IBIG: " + fmt(e["pagibig"]))
+                        if e["tax"] > 0: st.markdown("- Tax: " + fmt(e["tax"]))
+                        if e["cash_advance"] > 0: st.markdown("- Cash Advance: " + fmt(e["cash_advance"]))
+                        if e["absences"] > 0: st.markdown("- Absences: " + fmt(e["absences"]))
+                        if e["late_deductions"] > 0: st.markdown("- Late: " + fmt(e["late_deductions"]))
+                        if e["other_deductions"] > 0: st.markdown("- Other: " + fmt(e["other_deductions"]) + (" (" + e["other_deductions_note"] + ")" if e["other_deductions_note"] else ""))
+                        st.markdown("**Total Deductions: " + fmt(e["total_deductions"]) + "**")
+
+                    st.markdown("### NET PAY: " + fmt(e["net_pay"]))
+
+                    # Print payslip
+                    if st.button("Print Payslip", key="print_payslip"):
+                        body = '<div style="border:2px solid #0a1e5e; border-radius:8px; padding:20px;">'
+                        body += '<div style="text-align:center; margin-bottom:15px; border-bottom:2px solid #e8872a; padding-bottom:10px;">'
+                        body += '<div style="font-size:11px; color:#888;">PAYSLIP</div></div>'
+
+                        body += '<div class="row"><div class="col">'
+                        body += '<div class="label">Employee</div><div class="value">' + emp_name + '</div>'
+                        body += '<div class="label">Position</div><div class="value">' + (e["position"] or "N/A") + '</div>'
+                        body += '<div class="label">Rate</div><div class="value">' + fmt(e["rate_amount"]) + '/' + ("mo" if e["rate_type"] == "monthly" else "day") + '</div>'
+                        body += '</div><div class="col">'
+                        body += '<div class="label">Pay Period</div><div class="value">' + e["period_name"] + '</div>'
+                        body += '<div class="label">Period</div><div class="value">' + e["start_date"] + ' to ' + e["end_date"] + '</div>'
+                        body += '<div class="label">Pay Date</div><div class="value">' + (e["pay_date"] or "N/A") + '</div>'
+                        body += '</div></div>'
+
+                        body += '<div class="row" style="margin-top:15px;"><div class="col">'
+                        body += '<table><tr><th colspan="2">EARNINGS</th></tr>'
+                        body += '<tr><td>Basic Pay</td><td class="amount">' + fmt(e["basic_pay"]) + '</td></tr>'
+                        if e["overtime_pay"] > 0: body += '<tr><td>Overtime</td><td class="amount">' + fmt(e["overtime_pay"]) + '</td></tr>'
+                        if e["holiday_pay"] > 0: body += '<tr><td>Holiday Pay</td><td class="amount">' + fmt(e["holiday_pay"]) + '</td></tr>'
+                        if e["bonus"] > 0: body += '<tr><td>Bonus</td><td class="amount">' + fmt(e["bonus"]) + '</td></tr>'
+                        if e["other_earnings"] > 0: body += '<tr><td>Other</td><td class="amount">' + fmt(e["other_earnings"]) + '</td></tr>'
+                        body += '<tr style="background:#0a1e5e; color:white;"><td><strong>Gross Pay</strong></td><td><strong>' + fmt(e["gross_pay"]) + '</strong></td></tr>'
+                        body += '</table></div><div class="col">'
+
+                        body += '<table><tr><th colspan="2">DEDUCTIONS</th></tr>'
+                        if e["sss"] > 0: body += '<tr><td>SSS</td><td class="amount">' + fmt(e["sss"]) + '</td></tr>'
+                        if e["philhealth"] > 0: body += '<tr><td>PhilHealth</td><td class="amount">' + fmt(e["philhealth"]) + '</td></tr>'
+                        if e["pagibig"] > 0: body += '<tr><td>Pag-IBIG</td><td class="amount">' + fmt(e["pagibig"]) + '</td></tr>'
+                        if e["tax"] > 0: body += '<tr><td>Tax</td><td class="amount">' + fmt(e["tax"]) + '</td></tr>'
+                        if e["cash_advance"] > 0: body += '<tr><td>Cash Advance</td><td class="amount">' + fmt(e["cash_advance"]) + '</td></tr>'
+                        if e["absences"] > 0: body += '<tr><td>Absences</td><td class="amount">' + fmt(e["absences"]) + '</td></tr>'
+                        if e["late_deductions"] > 0: body += '<tr><td>Late</td><td class="amount">' + fmt(e["late_deductions"]) + '</td></tr>'
+                        if e["other_deductions"] > 0: body += '<tr><td>Other</td><td class="amount">' + fmt(e["other_deductions"]) + '</td></tr>'
+                        body += '<tr style="background:#0a1e5e; color:white;"><td><strong>Total Deductions</strong></td><td><strong>' + fmt(e["total_deductions"]) + '</strong></td></tr>'
+                        body += '</table></div></div>'
+
+                        body += '<div style="text-align:center; margin-top:20px; padding:15px; background:#0a1e5e; color:white; border-radius:8px; font-size:20px;">'
+                        body += '<strong>NET PAY: ' + fmt(e["net_pay"]) + '</strong></div>'
+
+                        body += '<div class="row" style="margin-top:30px;"><div class="col" style="border-top:1px solid #333; padding-top:5px; text-align:center;"><div class="label">Employee Signature</div></div>'
+                        body += '<div class="col" style="border-top:1px solid #333; padding-top:5px; text-align:center;"><div class="label">Authorized Signature</div></div></div>'
+
+                        body += '</div>'
+                        print_html("Payslip — " + emp_name, body)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
