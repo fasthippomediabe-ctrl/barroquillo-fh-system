@@ -601,6 +601,70 @@ def fmt(amount):
     return f"₱{amount:,.2f}"
 
 
+# ─── PH GOVERNMENT DEDUCTIONS (2024-2025 rates) ──────────────────────────────
+
+def compute_sss(monthly_salary):
+    """SSS employee contribution based on 2024 table."""
+    # SSS contribution table (Monthly Salary Credit -> Employee Share)
+    sss_table = [
+        (4250, 180), (4750, 202.50), (5250, 225), (5750, 247.50), (6250, 270),
+        (6750, 292.50), (7250, 315), (7750, 337.50), (8250, 360), (8750, 382.50),
+        (9250, 405), (9750, 427.50), (10250, 450), (10750, 472.50), (11250, 495),
+        (11750, 517.50), (12250, 540), (12750, 562.50), (13250, 585), (13750, 607.50),
+        (14250, 630), (14750, 652.50), (15250, 675), (15750, 697.50), (16250, 720),
+        (16750, 742.50), (17250, 765), (17750, 787.50), (18250, 810), (18750, 832.50),
+        (19250, 855), (19750, 877.50), (20250, 900), (20750, 922.50), (21250, 945),
+        (21750, 967.50), (22250, 990), (22750, 1012.50), (23250, 1035), (23750, 1057.50),
+        (24250, 1080), (24750, 1102.50), (25250, 1125), (25750, 1147.50), (26250, 1170),
+        (26750, 1192.50), (27250, 1215), (27750, 1237.50), (28250, 1260), (28750, 1282.50),
+        (29250, 1305), (29750, 1327.50), (float('inf'), 1350),
+    ]
+    for ceiling, contribution in sss_table:
+        if monthly_salary <= ceiling:
+            return contribution
+    return 1350
+
+
+def compute_philhealth(monthly_salary):
+    """PhilHealth employee share based on 2024 rates (5% total, 2.5% employee)."""
+    floor = 10000
+    ceiling = 100000
+    rate = 0.05
+    basis = max(floor, min(monthly_salary, ceiling))
+    total = basis * rate
+    return round(total / 2, 2)  # Employee share = 50%
+
+
+def compute_pagibig(monthly_salary):
+    """Pag-IBIG employee contribution based on 2024 rates."""
+    if monthly_salary <= 1500:
+        return round(monthly_salary * 0.01, 2)
+    else:
+        return min(round(monthly_salary * 0.02, 2), 200)  # Max ₱200 (based on ₱5,000 cap * 2% * 2)
+
+
+def compute_withholding_tax(monthly_salary, sss, philhealth, pagibig):
+    """Withholding tax based on 2024 TRAIN Law tax table (monthly)."""
+    taxable = monthly_salary - sss - philhealth - pagibig
+    if taxable <= 20833:
+        return 0
+    elif taxable <= 33333:
+        return round((taxable - 20833) * 0.15, 2)
+    elif taxable <= 66667:
+        return round(1875 + (taxable - 33333) * 0.20, 2)
+    elif taxable <= 166667:
+        return round(8541.80 + (taxable - 66667) * 0.25, 2)
+    elif taxable <= 666667:
+        return round(33541.80 + (taxable - 166667) * 0.30, 2)
+    else:
+        return round(183541.80 + (taxable - 666667) * 0.35, 2)
+
+
+def compute_13th_month(total_basic_earned, months_worked=12):
+    """13th month pay = total basic salary earned in the year / 12."""
+    return round(total_basic_earned / 12, 2) if months_worked > 0 else 0
+
+
 def get_service_balance(service_id):
     """How much the client still owes."""
     svc = run_query("SELECT total_amount, discount FROM services WHERE id=?", (service_id,))
@@ -1851,8 +1915,8 @@ elif page == "Expenses":
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "Payroll":
     st.title("Payroll")
-    tab_201, tab_employees, tab_add_emp, tab_run_payroll, tab_history, tab_payslip = st.tabs([
-        "201 File", "Employees", "Add Employee", "Run Payroll", "Payroll History", "Payslips"])
+    tab_201, tab_employees, tab_add_emp, tab_run_payroll, tab_history, tab_payslip, tab_13th = st.tabs([
+        "201 File", "Employees", "Add Employee", "Run Payroll", "Payroll History", "Payslips", "13th Month"])
 
     # ── 201 FILE TAB ──
     with tab_201:
@@ -2067,6 +2131,16 @@ elif page == "Payroll":
         if len(active_emps) == 0:
             st.info("Add employees first.")
         else:
+            # Contribution reference
+            with st.expander("PH Government Contribution Rates (2024-2025 reference)"):
+                st.markdown("""
+                **SSS:** Based on Monthly Salary Credit table (employee share ₱180 — ₱1,350)
+                **PhilHealth:** 5% of basic salary, split 50/50 (employee pays 2.5%, floor ₱10K, ceiling ₱100K)
+                **Pag-IBIG:** 2% of salary (max ₱200 employee share)
+                **Withholding Tax:** TRAIN Law 2024 — first ₱20,833/mo is tax-free
+                **13th Month Pay:** Total basic salary earned in the year ÷ 12
+                """)
+
             with st.form("run_payroll_form"):
                 st.markdown("**Pay Period**")
                 rp1, rp2, rp3 = st.columns(3)
@@ -2077,11 +2151,15 @@ elif page == "Payroll":
                 with rp3:
                     period_end = st.date_input("End Date", date.today(), key="pp_end")
 
-                pay_date = st.date_input("Pay Date", date.today(), key="pp_paydate")
+                rp4, rp5 = st.columns(2)
+                with rp4:
+                    pay_date = st.date_input("Pay Date", date.today(), key="pp_paydate")
+                with rp5:
+                    auto_compute = st.checkbox("Auto-compute SSS, PhilHealth, Pag-IBIG & Tax", value=True, key="auto_gov")
 
                 st.markdown("---")
                 st.markdown("**Employee Earnings & Deductions**")
-                st.caption("Fill in for each employee. Basic pay is auto-calculated from rate.")
+                st.caption("Government deductions are auto-computed based on basic pay. You can override any value.")
 
                 payroll_data = {}
                 for _, emp in active_emps.iterrows():
@@ -2093,10 +2171,18 @@ elif page == "Payroll":
                         # Auto-calc basic pay
                         if emp["rate_type"] == "monthly":
                             default_basic = float(emp["rate_amount"])
+                            monthly_equiv = default_basic
                         else:
                             days_in_period = (period_end - period_start).days + 1
-                            work_days = min(days_in_period, 26)  # approx work days
+                            work_days = min(days_in_period, 26)
                             default_basic = float(emp["rate_amount"]) * work_days
+                            monthly_equiv = float(emp["rate_amount"]) * 26  # Monthly equivalent for contributions
+
+                        # Auto-compute government deductions
+                        auto_sss = compute_sss(monthly_equiv)
+                        auto_phil = compute_philhealth(monthly_equiv)
+                        auto_pag = compute_pagibig(monthly_equiv)
+                        auto_tax = compute_withholding_tax(monthly_equiv, auto_sss, auto_phil, auto_pag)
 
                         pc1, pc2 = st.columns(2)
                         with pc1:
@@ -2108,11 +2194,11 @@ elif page == "Payroll":
                             other_earn = st.number_input("Other Earnings (₱)", value=0.0, step=50.0, format="%.2f", key="oear_" + str(eid))
                             other_earn_note = st.text_input("Other Earnings Note", key="oearn_" + str(eid))
                         with pc2:
-                            st.markdown("**Deductions**")
-                            d_sss = st.number_input("SSS (₱)", value=0.0, step=10.0, format="%.2f", key="sss_" + str(eid))
-                            d_phil = st.number_input("PhilHealth (₱)", value=0.0, step=10.0, format="%.2f", key="phil_" + str(eid))
-                            d_pag = st.number_input("Pag-IBIG (₱)", value=0.0, step=10.0, format="%.2f", key="pag_" + str(eid))
-                            d_tax = st.number_input("Tax (₱)", value=0.0, step=10.0, format="%.2f", key="tax_" + str(eid))
+                            st.markdown("**Deductions** (auto-computed)")
+                            d_sss = st.number_input("SSS (₱)", value=auto_sss if auto_compute else 0.0, step=10.0, format="%.2f", key="sss_" + str(eid))
+                            d_phil = st.number_input("PhilHealth (₱)", value=auto_phil if auto_compute else 0.0, step=10.0, format="%.2f", key="phil_" + str(eid))
+                            d_pag = st.number_input("Pag-IBIG (₱)", value=auto_pag if auto_compute else 0.0, step=10.0, format="%.2f", key="pag_" + str(eid))
+                            d_tax = st.number_input("Withholding Tax (₱)", value=auto_tax if auto_compute else 0.0, step=10.0, format="%.2f", key="tax_" + str(eid))
                             d_ca = st.number_input("Cash Advance (₱)", value=0.0, step=100.0, format="%.2f", key="ca_" + str(eid))
                             d_abs = st.number_input("Absences (₱)", value=0.0, step=50.0, format="%.2f", key="abs_" + str(eid))
                             d_late = st.number_input("Late Deductions (₱)", value=0.0, step=10.0, format="%.2f", key="late_" + str(eid))
@@ -2330,6 +2416,110 @@ elif page == "Payroll":
 
                         body += '</div>'
                         print_html("Payslip — " + emp_name, body)
+
+
+    # ── 13TH MONTH PAY TAB ──
+    with tab_13th:
+        st.subheader("13th Month Pay Calculator")
+        st.caption("13th Month Pay = Total Basic Salary Earned in the Year ÷ 12")
+
+        yr_13th = st.selectbox("Year", list(range(date.today().year, date.today().year - 3, -1)), key="yr_13th")
+
+        active_for_13th = run_query("SELECT id, first_name, last_name, position, rate_type, rate_amount, date_hired FROM employees WHERE is_active=1 ORDER BY last_name")
+
+        if len(active_for_13th) > 0:
+            yr_start = f"{yr_13th}-01-01"
+            yr_end = f"{yr_13th}-12-31"
+
+            rows_13th = []
+            for _, emp in active_for_13th.iterrows():
+                eid = int(emp["id"])
+                name = emp["last_name"] + ", " + emp["first_name"]
+
+                # Get total basic pay from payroll entries in this year
+                total_basic = run_query("""
+                    SELECT COALESCE(SUM(pe.basic_pay), 0) as total
+                    FROM payroll_entries pe
+                    JOIN payroll_periods pp ON pe.period_id = pp.id
+                    WHERE pe.employee_id = ? AND pp.start_date >= ? AND pp.end_date <= ?
+                """, (eid, yr_start, yr_end)).iloc[0]["total"]
+
+                # If no payroll entries, estimate from rate
+                if total_basic == 0:
+                    if emp["rate_type"] == "monthly":
+                        # Estimate based on months from hire date or Jan 1
+                        hire = emp.get("date_hired") or yr_start
+                        if hire > yr_end:
+                            months_worked = 0
+                        elif hire < yr_start:
+                            months_worked = 12
+                        else:
+                            from datetime import datetime as dt
+                            hire_dt = dt.strptime(hire[:10], "%Y-%m-%d")
+                            months_worked = 12 - hire_dt.month + 1
+                        total_basic = float(emp["rate_amount"]) * months_worked
+                    else:
+                        total_basic = float(emp["rate_amount"]) * 26 * 12  # rough estimate
+
+                thirteenth = compute_13th_month(total_basic)
+
+                rows_13th.append({
+                    "Employee": name,
+                    "Position": emp["position"] or "Staff",
+                    "Total Basic (Year)": fmt(total_basic),
+                    "13th Month Pay": fmt(thirteenth),
+                    "_raw_13th": thirteenth,
+                    "_raw_basic": total_basic,
+                })
+
+            df_13th = pd.DataFrame(rows_13th)
+            total_13th = sum(r["_raw_13th"] for r in rows_13th)
+
+            st.metric("Total 13th Month Payable", fmt(total_13th))
+            st.dataframe(df_13th[["Employee", "Position", "Total Basic (Year)", "13th Month Pay"]],
+                         use_container_width=True, hide_index=True)
+
+            # Contribution summary
+            st.markdown("---")
+            st.subheader("Government Contributions Summary (" + str(yr_13th) + ")")
+            st.caption("Monthly contributions per employee based on current rate")
+
+            contrib_rows = []
+            for _, emp in active_for_13th.iterrows():
+                if emp["rate_type"] == "monthly":
+                    monthly = float(emp["rate_amount"])
+                else:
+                    monthly = float(emp["rate_amount"]) * 26
+
+                sss_ee = compute_sss(monthly)
+                phil_ee = compute_philhealth(monthly)
+                pag_ee = compute_pagibig(monthly)
+                tax_ee = compute_withholding_tax(monthly, sss_ee, phil_ee, pag_ee)
+
+                contrib_rows.append({
+                    "Employee": emp["last_name"] + ", " + emp["first_name"],
+                    "Monthly Salary": fmt(monthly),
+                    "SSS": fmt(sss_ee),
+                    "PhilHealth": fmt(phil_ee),
+                    "Pag-IBIG": fmt(pag_ee),
+                    "Tax": fmt(tax_ee),
+                    "Total Deductions": fmt(sss_ee + phil_ee + pag_ee + tax_ee),
+                    "Net After Deductions": fmt(monthly - sss_ee - phil_ee - pag_ee - tax_ee),
+                })
+
+            st.dataframe(pd.DataFrame(contrib_rows), use_container_width=True, hide_index=True)
+
+            # Print
+            if st.button("Print 13th Month & Contributions", key="print_13th"):
+                body = '<div style="text-align:center; margin-bottom:10px; padding:8px; background:#0a1e5e; color:white; border-radius:4px;"><strong>13TH MONTH PAY — ' + str(yr_13th) + '</strong></div>'
+                body += '<p><strong>Total 13th Month Payable:</strong> ' + fmt(total_13th) + '</p>'
+                p13 = df_13th[["Employee", "Position", "Total Basic (Year)", "13th Month Pay"]].copy()
+                body += df_to_html_table(p13)
+                body += '<div style="margin-top:20px; text-align:center; padding:8px; background:#0a1e5e; color:white; border-radius:4px;"><strong>MONTHLY GOVERNMENT CONTRIBUTIONS</strong></div>'
+                body += df_to_html_table(pd.DataFrame(contrib_rows))
+                print_html("13th Month Pay & Contributions — " + str(yr_13th), body)
+        else:
+            st.info("No active employees.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
