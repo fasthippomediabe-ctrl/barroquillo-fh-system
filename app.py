@@ -1048,12 +1048,6 @@ if page == "Dashboard":
     month_expenses = run_query(
         "SELECT COALESCE(SUM(e.amount),0) as t FROM expenses e WHERE e.date BETWEEN ? AND ?",
         (ms, me)).iloc[0]["t"]
-    total_receivables = run_query("""
-        SELECT COALESCE(SUM(s.total_amount - s.discount),0) -
-               COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.service_id = s.id),0) as bal
-        FROM services s WHERE s.status='active'
-    """)
-    # Compute receivables properly
     active_services = run_query("SELECT id FROM services WHERE status='active'")
     total_recv = sum(max(0, get_service_balance(r["id"])) for _, r in active_services.iterrows())
 
