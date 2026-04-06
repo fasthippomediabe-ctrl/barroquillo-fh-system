@@ -402,17 +402,36 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT NOT NULL,
             last_name TEXT NOT NULL,
+            middle_name TEXT,
+            birthday TEXT,
+            gender TEXT,
+            civil_status TEXT,
             position TEXT,
+            department TEXT,
             employment_type TEXT DEFAULT 'regular',
             rate_type TEXT DEFAULT 'monthly',
             rate_amount REAL NOT NULL DEFAULT 0,
             phone TEXT,
+            email TEXT,
             address TEXT,
+            -- Government IDs
             sss_number TEXT,
             philhealth_number TEXT,
             pagibig_number TEXT,
             tin_number TEXT,
+            -- Emergency contact
+            emergency_name TEXT,
+            emergency_relationship TEXT,
+            emergency_phone TEXT,
+            -- Employment details
             date_hired TEXT,
+            date_regularized TEXT,
+            date_separated TEXT,
+            separation_reason TEXT,
+            -- 201 file extras
+            education TEXT,
+            skills TEXT,
+            notes TEXT,
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -686,7 +705,7 @@ ROLE_PAGES = {
         "Service Packages", "Reports", "Admin Panel", "My Profile",
     ],
     "hr": [
-        "Dashboard", "Payroll", "My Profile",
+        "Payroll", "My Profile",
     ],
     "manager": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
@@ -1832,8 +1851,102 @@ elif page == "Expenses":
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "Payroll":
     st.title("Payroll")
-    tab_employees, tab_add_emp, tab_run_payroll, tab_history, tab_payslip = st.tabs([
-        "Employees", "Add Employee", "Run Payroll", "Payroll History", "Payslips"])
+    tab_201, tab_employees, tab_add_emp, tab_run_payroll, tab_history, tab_payslip = st.tabs([
+        "201 File", "Employees", "Add Employee", "Run Payroll", "Payroll History", "Payslips"])
+
+    # ── 201 FILE TAB ──
+    with tab_201:
+        st.subheader("Employee 201 Files")
+        all_emps_201 = run_query("SELECT * FROM employees ORDER BY is_active DESC, last_name, first_name")
+
+        if len(all_emps_201) > 0:
+            search_201 = st.text_input("Search employee", key="search_201")
+            if search_201:
+                mask = all_emps_201.apply(lambda r: search_201.lower() in (r.get("first_name", "") + " " + r.get("last_name", "") + " " + (r.get("position") or "")).lower(), axis=1)
+                all_emps_201 = all_emps_201[mask]
+
+            st.caption(str(len(all_emps_201)) + " employees")
+
+            for _, emp in all_emps_201.iterrows():
+                status_icon = "🟢" if emp["is_active"] else "🔴"
+                name = emp["last_name"] + ", " + emp["first_name"] + (" " + emp.get("middle_name", "") if emp.get("middle_name") else "")
+                with st.expander(status_icon + " " + name + " — " + (emp.get("position") or "Staff")):
+                    fc1, fc2, fc3 = st.columns(3)
+                    with fc1:
+                        st.markdown("**Personal Information**")
+                        st.markdown("- **Full Name:** " + name)
+                        st.markdown("- **Birthday:** " + (emp.get("birthday") or "N/A"))
+                        st.markdown("- **Gender:** " + (emp.get("gender") or "N/A"))
+                        st.markdown("- **Civil Status:** " + (emp.get("civil_status") or "N/A"))
+                        st.markdown("- **Phone:** " + (emp.get("phone") or "N/A"))
+                        st.markdown("- **Email:** " + (emp.get("email") or "N/A"))
+                        st.markdown("- **Address:** " + (emp.get("address") or "N/A"))
+                    with fc2:
+                        st.markdown("**Employment Details**")
+                        st.markdown("- **Position:** " + (emp.get("position") or "N/A"))
+                        st.markdown("- **Department:** " + (emp.get("department") or "N/A"))
+                        st.markdown("- **Type:** " + (emp.get("employment_type") or "Regular").title())
+                        st.markdown("- **Rate:** " + fmt(emp["rate_amount"]) + "/" + ("mo" if emp.get("rate_type") == "monthly" else "day"))
+                        st.markdown("- **Date Hired:** " + (emp.get("date_hired") or "N/A"))
+                        st.markdown("- **Date Regularized:** " + (emp.get("date_regularized") or "N/A"))
+                        if not emp["is_active"]:
+                            st.markdown("- **Date Separated:** " + (emp.get("date_separated") or "N/A"))
+                            st.markdown("- **Reason:** " + (emp.get("separation_reason") or "N/A"))
+                    with fc3:
+                        st.markdown("**Government IDs**")
+                        st.markdown("- **SSS:** " + (emp.get("sss_number") or "N/A"))
+                        st.markdown("- **PhilHealth:** " + (emp.get("philhealth_number") or "N/A"))
+                        st.markdown("- **Pag-IBIG:** " + (emp.get("pagibig_number") or "N/A"))
+                        st.markdown("- **TIN:** " + (emp.get("tin_number") or "N/A"))
+                        st.markdown("---")
+                        st.markdown("**Emergency Contact**")
+                        st.markdown("- **Name:** " + (emp.get("emergency_name") or "N/A"))
+                        st.markdown("- **Relationship:** " + (emp.get("emergency_relationship") or "N/A"))
+                        st.markdown("- **Phone:** " + (emp.get("emergency_phone") or "N/A"))
+
+                    if emp.get("education"):
+                        st.markdown("**Education:** " + emp["education"])
+                    if emp.get("skills"):
+                        st.markdown("**Skills:** " + emp["skills"])
+                    if emp.get("notes"):
+                        st.markdown("**Notes:** " + emp["notes"])
+
+                    # Print 201 File
+                    if st.button("Print 201 File", key="print_201_" + str(emp["id"])):
+                        body = '<div style="text-align:center; margin-bottom:10px; padding:8px; background:#0a1e5e; color:white; border-radius:4px;"><strong>EMPLOYEE 201 FILE</strong></div>'
+                        body += '<div class="row"><div class="col">'
+                        body += '<div class="label">Full Name</div><div class="value">' + name + '</div>'
+                        body += '<div class="label">Birthday</div><div class="value">' + (emp.get("birthday") or "N/A") + '</div>'
+                        body += '<div class="label">Gender</div><div class="value">' + (emp.get("gender") or "N/A") + '</div>'
+                        body += '<div class="label">Civil Status</div><div class="value">' + (emp.get("civil_status") or "N/A") + '</div>'
+                        body += '<div class="label">Phone</div><div class="value">' + (emp.get("phone") or "N/A") + '</div>'
+                        body += '<div class="label">Email</div><div class="value">' + (emp.get("email") or "N/A") + '</div>'
+                        body += '<div class="label">Address</div><div class="value">' + (emp.get("address") or "N/A") + '</div>'
+                        body += '</div><div class="col">'
+                        body += '<div class="label">Position</div><div class="value">' + (emp.get("position") or "N/A") + '</div>'
+                        body += '<div class="label">Department</div><div class="value">' + (emp.get("department") or "N/A") + '</div>'
+                        body += '<div class="label">Employment Type</div><div class="value">' + (emp.get("employment_type") or "Regular").title() + '</div>'
+                        body += '<div class="label">Rate</div><div class="value">' + fmt(emp["rate_amount"]) + '/' + ("mo" if emp.get("rate_type") == "monthly" else "day") + '</div>'
+                        body += '<div class="label">Date Hired</div><div class="value">' + (emp.get("date_hired") or "N/A") + '</div>'
+                        body += '<div class="label">Date Regularized</div><div class="value">' + (emp.get("date_regularized") or "N/A") + '</div>'
+                        body += '</div><div class="col">'
+                        body += '<div class="label">SSS</div><div class="value">' + (emp.get("sss_number") or "N/A") + '</div>'
+                        body += '<div class="label">PhilHealth</div><div class="value">' + (emp.get("philhealth_number") or "N/A") + '</div>'
+                        body += '<div class="label">Pag-IBIG</div><div class="value">' + (emp.get("pagibig_number") or "N/A") + '</div>'
+                        body += '<div class="label">TIN</div><div class="value">' + (emp.get("tin_number") or "N/A") + '</div>'
+                        body += '<div class="label" style="margin-top:10px;">Emergency Contact</div>'
+                        body += '<div class="value">' + (emp.get("emergency_name") or "N/A") + ' (' + (emp.get("emergency_relationship") or "") + ')</div>'
+                        body += '<div class="label">Emergency Phone</div><div class="value">' + (emp.get("emergency_phone") or "N/A") + '</div>'
+                        body += '</div></div>'
+                        if emp.get("education"):
+                            body += '<div style="margin-top:10px;"><div class="label">Education</div><div class="value">' + emp["education"] + '</div></div>'
+                        if emp.get("skills"):
+                            body += '<div><div class="label">Skills</div><div class="value">' + emp["skills"] + '</div></div>'
+                        if emp.get("notes"):
+                            body += '<div><div class="label">Notes</div><div class="value">' + emp["notes"] + '</div></div>'
+                        print_html("201 File — " + name, body)
+        else:
+            st.info("No employees yet. Add one in the **Add Employee** tab.")
 
     # ── EMPLOYEES TAB ──
     with tab_employees:
@@ -1870,34 +1983,77 @@ elif page == "Payroll":
     with tab_add_emp:
         with st.form("add_employee", clear_on_submit=True):
             st.subheader("New Employee")
-            ae1, ae2 = st.columns(2)
+
+            st.markdown("**Personal Information**")
+            ae1, ae2, ae3 = st.columns(3)
             with ae1:
                 emp_fname = st.text_input("First Name *")
                 emp_lname = st.text_input("Last Name *")
+                emp_mname = st.text_input("Middle Name")
+            with ae2:
+                emp_bday = st.date_input("Birthday", value=None, key="emp_bday")
+                emp_gender = st.selectbox("Gender", ["Male", "Female"], key="emp_gender")
+                emp_civil = st.selectbox("Civil Status", ["Single", "Married", "Widowed", "Separated"], key="emp_civil")
+            with ae3:
+                emp_phone = st.text_input("Phone")
+                emp_email_field = st.text_input("Email", key="emp_email_f")
+                emp_address = st.text_area("Address", height=68)
+
+            st.markdown("---")
+            st.markdown("**Employment Details**")
+            ae4, ae5 = st.columns(2)
+            with ae4:
                 emp_position = st.text_input("Position", placeholder="e.g., Embalmer, Driver, Chapel Staff")
+                emp_dept = st.text_input("Department", placeholder="e.g., Chapel, Embalming, Admin")
                 emp_type = st.selectbox("Employment Type", ["regular", "contractual", "part_time"])
+            with ae5:
                 emp_rate_type = st.selectbox("Rate Type", ["monthly", "daily"])
                 emp_rate = st.number_input("Rate Amount (₱) *", min_value=0.0, step=100.0, format="%.2f")
-            with ae2:
-                emp_phone = st.text_input("Phone")
-                emp_address = st.text_area("Address", height=68)
+                emp_hired = st.date_input("Date Hired", value=None, key="emp_hired")
+
+            st.markdown("---")
+            st.markdown("**Government IDs**")
+            ae6, ae7 = st.columns(2)
+            with ae6:
                 emp_sss = st.text_input("SSS Number")
                 emp_philhealth = st.text_input("PhilHealth Number")
+            with ae7:
                 emp_pagibig = st.text_input("Pag-IBIG Number")
                 emp_tin = st.text_input("TIN")
-            emp_hired = st.date_input("Date Hired", value=None, key="emp_hired")
+
+            st.markdown("---")
+            st.markdown("**Emergency Contact**")
+            ae8, ae9 = st.columns(2)
+            with ae8:
+                emp_emer_name = st.text_input("Emergency Contact Name")
+                emp_emer_rel = st.text_input("Relationship", placeholder="e.g., Spouse, Parent, Sibling")
+            with ae9:
+                emp_emer_phone = st.text_input("Emergency Phone")
+
+            st.markdown("---")
+            st.markdown("**Additional Info**")
+            emp_edu = st.text_input("Education", placeholder="e.g., BS Nursing - XYZ University")
+            emp_skills = st.text_input("Skills", placeholder="e.g., Embalming certified, Driver's license")
+            emp_notes = st.text_area("Notes", height=60, key="emp_notes")
 
             if st.form_submit_button("Save Employee", type="primary", use_container_width=True):
                 if emp_fname and emp_lname and emp_rate > 0:
                     run_insert("""
-                        INSERT INTO employees (first_name, last_name, position, employment_type,
-                            rate_type, rate_amount, phone, address, sss_number, philhealth_number,
-                            pagibig_number, tin_number, date_hired)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """, (emp_fname.strip().title(), emp_lname.strip().title(), emp_position,
-                          emp_type, emp_rate_type, emp_rate, emp_phone, emp_address,
+                        INSERT INTO employees (first_name, last_name, middle_name, birthday, gender,
+                            civil_status, position, department, employment_type, rate_type, rate_amount,
+                            phone, email, address, sss_number, philhealth_number, pagibig_number, tin_number,
+                            emergency_name, emergency_relationship, emergency_phone,
+                            date_hired, education, skills, notes)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (emp_fname.strip().title(), emp_lname.strip().title(),
+                          emp_mname.strip().title() if emp_mname else None,
+                          emp_bday.isoformat() if emp_bday else None, emp_gender, emp_civil,
+                          emp_position, emp_dept, emp_type, emp_rate_type, emp_rate,
+                          emp_phone, emp_email_field, emp_address,
                           emp_sss, emp_philhealth, emp_pagibig, emp_tin,
-                          emp_hired.isoformat() if emp_hired else None))
+                          emp_emer_name, emp_emer_rel, emp_emer_phone,
+                          emp_hired.isoformat() if emp_hired else None,
+                          emp_edu, emp_skills, emp_notes))
                     st.success("Employee added!"); st.rerun()
                 else:
                     st.error("Fill in First Name, Last Name, and Rate.")
