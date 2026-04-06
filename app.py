@@ -442,6 +442,9 @@ def init_db():
             education TEXT,
             skills TEXT,
             notes TEXT,
+            photo TEXT,
+            resume TEXT,
+            resume_filename TEXT,
             is_active INTEGER DEFAULT 1,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -1943,6 +1946,10 @@ elif page == "Payroll":
                 status_icon = "🟢" if emp["is_active"] else "🔴"
                 name = emp["last_name"] + ", " + emp["first_name"] + (" " + emp.get("middle_name", "") if emp.get("middle_name") else "")
                 with st.expander(status_icon + " " + name + " — " + (emp.get("position") or "Staff")):
+                    # Show photo if exists
+                    if emp.get("photo"):
+                        st.markdown('<div style="text-align:center; margin-bottom:10px;"><img src="data:image/png;base64,' + emp["photo"] + '" style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #e8872a;"></div>', unsafe_allow_html=True)
+
                     fc1, fc2, fc3 = st.columns(3)
                     with fc1:
                         st.markdown("**Personal Information**")
@@ -1982,6 +1989,14 @@ elif page == "Payroll":
                         st.markdown("**Skills:** " + emp["skills"])
                     if emp.get("notes"):
                         st.markdown("**Notes:** " + emp["notes"])
+
+                    # Resume download
+                    if emp.get("resume") and emp.get("resume_filename"):
+                        import base64 as b64mod
+                        resume_bytes = b64mod.b64decode(emp["resume"])
+                        st.download_button("Download Resume: " + emp["resume_filename"],
+                                           resume_bytes, emp["resume_filename"],
+                                           key="dl_resume_" + str(emp["id"]))
 
                     # Print 201 File
                     if st.button("Print 201 File", key="print_201_" + str(emp["id"])):
@@ -2110,7 +2125,7 @@ elif page == "Payroll":
 
             if st.form_submit_button("Save Employee", type="primary", use_container_width=True):
                 if emp_fname and emp_lname and emp_rate > 0:
-                    run_insert("""
+                    new_emp_id = run_insert("""
                         INSERT INTO employees (first_name, last_name, middle_name, birthday, gender,
                             civil_status, position, department, employment_type, rate_type, rate_amount,
                             phone, email, address, sss_number, philhealth_number, pagibig_number, tin_number,
@@ -2126,9 +2141,59 @@ elif page == "Payroll":
                           emp_emer_name, emp_emer_rel, emp_emer_phone,
                           emp_hired.isoformat() if emp_hired else None,
                           emp_edu, emp_skills, emp_notes))
-                    st.success("Employee added!"); st.rerun()
+                    st.session_state["new_emp_id"] = new_emp_id
+                    st.success("Employee added! You can now upload photo & resume below.")
                 else:
                     st.error("Fill in First Name, Last Name, and Rate.")
+
+        # Upload photo & resume (outside form — file_uploader doesn't work in forms)
+        st.markdown("---")
+        st.markdown("**Upload Employee Photo & Resume**")
+
+        # Select employee to upload for
+        upload_emps = run_query("SELECT id, first_name, last_name FROM employees WHERE is_active=1 ORDER BY id DESC")
+        if len(upload_emps) > 0:
+            upload_map = dict(zip(
+                upload_emps.apply(lambda r: "#" + str(r["id"]) + " — " + r["first_name"] + " " + r["last_name"], axis=1),
+                upload_emps["id"]))
+            # Default to newly added employee if exists
+            upload_options = list(upload_map.keys())
+            sel_upload_emp = st.selectbox("Select Employee", upload_options, key="upload_emp_sel")
+            upload_eid = int(upload_map[sel_upload_emp])
+
+            uc1, uc2 = st.columns(2)
+            with uc1:
+                st.markdown("**Photo** (PNG, JPG)")
+                emp_photo = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="emp_photo_upload")
+                if emp_photo:
+                    import base64 as b64mod
+                    try:
+                        from PIL import Image
+                        img = Image.open(emp_photo)
+                        img.thumbnail((300, 300))
+                        buf = io.BytesIO()
+                        img.save(buf, format="PNG")
+                        photo_b64 = b64mod.b64encode(buf.getvalue()).decode()
+                    except ImportError:
+                        photo_b64 = b64mod.b64encode(emp_photo.read()).decode()
+
+                    st.markdown('<div style="text-align:center;"><img src="data:image/png;base64,' + photo_b64 + '" style="width:120px;height:120px;border-radius:8px;object-fit:cover;border:3px solid #e8872a;"></div>', unsafe_allow_html=True)
+                    if st.button("Save Photo", type="primary", key="save_emp_photo"):
+                        run_query("UPDATE employees SET photo=? WHERE id=?", (photo_b64, upload_eid), fetch=False)
+                        st.success("Photo saved!"); st.rerun()
+
+            with uc2:
+                st.markdown("**Resume** (PDF, DOC, DOCX)")
+                emp_resume = st.file_uploader("Upload Resume", type=["pdf", "doc", "docx"], key="emp_resume_upload")
+                if emp_resume:
+                    import base64 as b64mod
+                    resume_b64 = b64mod.b64encode(emp_resume.read()).decode()
+                    resume_fname = emp_resume.name
+                    st.caption("File: " + resume_fname)
+                    if st.button("Save Resume", type="primary", key="save_emp_resume"):
+                        run_query("UPDATE employees SET resume=?, resume_filename=? WHERE id=?",
+                                  (resume_b64, resume_fname, upload_eid), fetch=False)
+                        st.success("Resume saved!"); st.rerun()
 
     # ── RUN PAYROLL TAB ──
     with tab_run_payroll:
