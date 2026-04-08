@@ -173,6 +173,12 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
+    # Migration: add deceased_birthday column if missing
+    try:
+        c.execute("ALTER TABLE clients ADD COLUMN deceased_birthday TEXT")
+    except Exception:
+        pass
+
     # Clients = the family / contact person arranging the service
     c.execute(_sql("""
         CREATE TABLE IF NOT EXISTS clients (
@@ -788,6 +794,10 @@ ROLE_PAGES = {
     "hr": [
         "Payroll", "My Profile",
     ],
+    "accounting": [
+        "Dashboard", "Payments", "Suppliers", "Expenses", "Payroll",
+        "Liabilities", "Reports", "My Profile",
+    ],
     "manager": [
         "Dashboard", "Clients & Deceased", "Services", "Payments",
         "Inventory", "Suppliers", "Expenses", "Liabilities",
@@ -932,52 +942,49 @@ _today = date.today().isoformat()
 _tomorrow = (date.today() + timedelta(days=1)).isoformat()
 _in3days = (date.today() + timedelta(days=3)).isoformat()
 
-# Burials today
-_burials_today = run_query("""
-    SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
-           c.contact_name, c.contact_phone, s.burial_date, s.burial_location,
-           sp.name as package
-    FROM services s
-    JOIN clients c ON s.client_id = c.id
-    LEFT JOIN service_packages sp ON s.package_id = sp.id
-    WHERE s.status = 'active' AND s.burial_date = ?
-""", (_today,))
+@st.cache_data(ttl=120, show_spinner=False)
+def _get_notification_data(today, tomorrow, in3days):
+    """Cached notification queries — refreshes every 2 min."""
+    bt = run_query("""
+        SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
+               c.contact_name, c.contact_phone, s.burial_date, s.burial_location,
+               sp.name as package
+        FROM services s
+        JOIN clients c ON s.client_id = c.id
+        LEFT JOIN service_packages sp ON s.package_id = sp.id
+        WHERE s.status = 'active' AND s.burial_date = ?
+    """, (today,))
+    btm = run_query("""
+        SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
+               c.contact_name, c.contact_phone, s.burial_date, s.burial_location
+        FROM services s
+        JOIN clients c ON s.client_id = c.id
+        WHERE s.status = 'active' AND s.burial_date = ?
+    """, (tomorrow,))
+    bup = run_query("""
+        SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
+               c.contact_name, s.burial_date, s.burial_location
+        FROM services s
+        JOIN clients c ON s.client_id = c.id
+        WHERE s.status = 'active' AND s.burial_date > ? AND s.burial_date <= ?
+    """, (tomorrow, in3days))
+    wt = run_query("""
+        SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
+               c.contact_name, s.wake_start_date, s.wake_end_date
+        FROM services s
+        JOIN clients c ON s.client_id = c.id
+        WHERE s.status = 'active' AND ? BETWEEN s.wake_start_date AND s.wake_end_date
+    """, (today,))
+    uu = run_query("""
+        SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
+               c.contact_name, s.burial_date, s.total_amount, s.discount
+        FROM services s
+        JOIN clients c ON s.client_id = c.id
+        WHERE s.status = 'active' AND s.burial_date BETWEEN ? AND ?
+    """, (today, in3days))
+    return bt, btm, bup, wt, uu
 
-# Burials tomorrow
-_burials_tomorrow = run_query("""
-    SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
-           c.contact_name, c.contact_phone, s.burial_date, s.burial_location
-    FROM services s
-    JOIN clients c ON s.client_id = c.id
-    WHERE s.status = 'active' AND s.burial_date = ?
-""", (_tomorrow,))
-
-# Burials in next 3 days (excluding today & tomorrow)
-_burials_upcoming = run_query("""
-    SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
-           c.contact_name, s.burial_date, s.burial_location
-    FROM services s
-    JOIN clients c ON s.client_id = c.id
-    WHERE s.status = 'active' AND s.burial_date > ? AND s.burial_date <= ?
-""", (_tomorrow, _in3days))
-
-# Wake happening today
-_wakes_today = run_query("""
-    SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
-           c.contact_name, s.wake_start_date, s.wake_end_date
-    FROM services s
-    JOIN clients c ON s.client_id = c.id
-    WHERE s.status = 'active' AND ? BETWEEN s.wake_start_date AND s.wake_end_date
-""", (_today,))
-
-# Outstanding balances with burial approaching (unpaid & burial within 2 days)
-_unpaid_urgent = run_query("""
-    SELECT s.id, c.deceased_first_name || ' ' || c.deceased_last_name as deceased,
-           c.contact_name, s.burial_date, s.total_amount, s.discount
-    FROM services s
-    JOIN clients c ON s.client_id = c.id
-    WHERE s.status = 'active' AND s.burial_date BETWEEN ? AND ?
-""", (_today, _in3days))
+_burials_today, _burials_tomorrow, _burials_upcoming, _wakes_today, _unpaid_urgent = _get_notification_data(_today, _tomorrow, _in3days)
 
 # Show alerts
 if len(_burials_today) > 0:
@@ -3553,7 +3560,7 @@ elif page == "Admin Panel":
                         non_admin_users.apply(lambda r: f"{r['display_name']} (@{r['username']}) — {r['role']}", axis=1),
                         non_admin_users["id"]))
                     sel_user = st.selectbox("Select User", list(user_map.keys()), key="role_user")
-                    new_role = st.selectbox("New Role", ["staff", "manager", "hr", "admin"], key="new_role")
+                    new_role = st.selectbox("New Role", ["staff", "manager", "hr", "accounting", "admin"], key="new_role")
                     if st.button("Update Role", key="upd_role"):
                         run_query("UPDATE users SET role=? WHERE id=?",
                                   (new_role, int(user_map[sel_user])), fetch=False)
@@ -3603,7 +3610,7 @@ elif page == "Admin Panel":
             nu_username = st.text_input("Username *", placeholder="e.g., maria")
             nu_password = st.text_input("Password *", type="password")
             nu_password2 = st.text_input("Confirm Password *", type="password")
-            nu_role = st.selectbox("Role", ["staff", "manager", "hr", "admin"])
+            nu_role = st.selectbox("Role", ["staff", "manager", "hr", "accounting", "admin"])
 
             st.markdown("---")
             st.markdown("**Role Permissions:**")
