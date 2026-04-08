@@ -173,11 +173,15 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
-    # Migration: add deceased_birthday column if missing
+    # Migration: add deceased_birthday column if missing (safe for both SQLite + Postgres)
     try:
         c.execute("ALTER TABLE clients ADD COLUMN deceased_birthday TEXT")
+        conn.commit()
     except Exception:
-        pass
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
     # Clients = the family / contact person arranging the service
     c.execute(_sql("""
