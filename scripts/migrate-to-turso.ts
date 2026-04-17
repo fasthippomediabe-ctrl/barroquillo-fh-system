@@ -3,16 +3,17 @@
  *
  * Usage:
  *   export TURSO_DATABASE_URL="libsql://<your-db>-<org>.turso.io"
- *   export TURSO_AUTH_TOKEN="<token from turso db tokens create>"
+ *   export TURSO_AUTH_TOKEN="<token from the Turso dashboard>"
  *   export SOURCE_DB="./prisma/seed.db"    (optional; defaults to seed.db)
  *   npx tsx scripts/migrate-to-turso.ts
  *
- * It creates every table from prisma/schema.prisma on the remote DB, then
+ * Recreates every table from prisma/schema.prisma on the remote DB, then
  * copies every row across. Safe to re-run: drops and recreates tables first.
  */
 import { createClient } from "@libsql/client";
-import Database from "better-sqlite3-never-installed-here"; // sentinel: we read via node sqlite
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 async function main() {
   const url = process.env.TURSO_DATABASE_URL;
@@ -23,9 +24,9 @@ async function main() {
     process.exit(1);
   }
 
-  // Use node:sqlite (stdlib) to avoid re-adding better-sqlite3 as a dep.
-  const { DatabaseSync } = await import("node:sqlite");
-  const local = new DatabaseSync(src);
+  const absSrc = resolve(src);
+  const localUrl = pathToFileURL(absSrc).toString();
+  const local = createClient({ url: localUrl });
   const remote = createClient({ url, authToken: token });
 
   // DDL matching prisma/schema.prisma. Column names use the snake_case
@@ -190,12 +191,10 @@ async function main() {
     )`,
   ];
 
-  // Order matters for FK refs, but FKs aren't declared at DDL level so we can
-  // drop in any order. Use the reverse of creation order for drops.
   const tables = ddl.map((s) => s.match(/CREATE TABLE (\w+)/)![1]);
 
-  console.log(`Connecting to ${url} ...`);
-  console.log(`Source: ${src} (${readFileSync(src).byteLength} bytes)`);
+  console.log(`Source: ${absSrc} (${readFileSync(absSrc).byteLength} bytes)`);
+  console.log(`Target: ${url}`);
 
   for (const t of [...tables].reverse()) {
     console.log(`  DROP ${t}`);
@@ -208,20 +207,22 @@ async function main() {
   }
 
   for (const table of tables) {
-    const rows = local.prepare(`SELECT * FROM ${table}`).all() as Record<
-      string,
-      unknown
-    >[];
+    const result = await local.execute(`SELECT * FROM ${table}`);
+    const rows = result.rows;
     if (rows.length === 0) {
       console.log(`  ${table}: empty`);
       continue;
     }
-    const cols = Object.keys(rows[0]);
+    const cols = result.columns;
     const placeholders = cols.map(() => "?").join(", ");
     const insert = `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`;
     const batch = rows.map((r) => ({
       sql: insert,
-      args: cols.map((c) => (r[c] === undefined ? null : (r[c] as never))),
+      args: cols.map((c) => {
+        // biome-ignore lint/suspicious/noExplicitAny: libsql row value
+        const v = (r as any)[c];
+        return v === undefined ? null : v;
+      }),
     }));
     await remote.batch(batch, "write");
     console.log(`  ${table}: ${rows.length} rows`);
