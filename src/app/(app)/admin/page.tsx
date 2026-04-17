@@ -5,6 +5,7 @@ import { fmtDate } from "@/lib/format";
 import { redirect } from "next/navigation";
 import NewUserForm from "./NewUserForm";
 import UserActions from "./UserActions";
+import ProfitShares from "./ProfitShares";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +16,29 @@ export default async function AdminPage() {
   if (u?.role !== "admin") redirect("/");
   const myId = Number(u?.id);
 
-  const users = await prisma.user.findMany({
-    orderBy: [{ role: "asc" }, { username: "asc" }],
-  });
+  const [users, shares] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: [{ role: "asc" }, { username: "asc" }],
+    }),
+    prisma.profitShare.findMany({
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+    }),
+  ]);
 
   return (
     <div>
-      <PageHeader title="Admin Panel" subtitle="User management" />
+      <PageHeader title="Admin Panel" subtitle="User management & profit sharing" />
+
+      <section className="card mb-6">
+        <h3 className="font-bold mb-4">Profit Sharing</h3>
+        <p className="text-xs text-[#4a5678] mb-4">
+          Per-service net income (revenue minus direct expenses) is split
+          across these shares. The largest share is treated as the Company
+          Fund and absorbs overhead (expenses not linked to any service).
+          Active percentages must total 100%.
+        </p>
+        <ProfitShares shares={shares} />
+      </section>
 
       <section className="card mb-6">
         <h3 className="font-bold mb-4">Add New User</h3>

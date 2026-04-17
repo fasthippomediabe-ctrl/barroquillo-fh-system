@@ -219,6 +219,19 @@ model LiabilityPayment {
   @@map("liability_payments")
 }
 
+model ProfitShare {
+  id         Int     @id @default(autoincrement())
+  name       String
+  percent    Float
+  bankInfo   String? @map("bank_info")
+  notes      String?
+  isActive   Int     @default(1) @map("is_active")
+  sortOrder  Int     @default(0) @map("sort_order")
+  createdAt  String? @map("created_at")
+
+  @@map("profit_shares")
+}
+
 model Employee {
   id                    Int     @id @default(autoincrement())
   firstName             String  @map("first_name")

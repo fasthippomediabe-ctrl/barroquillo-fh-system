@@ -13,6 +13,7 @@ import {
   Shield,
   UserCircle,
   IdCard,
+  Scale,
 } from "lucide-react";
 
 export type NavItem = {
@@ -34,6 +35,7 @@ export const nav: NavItem[] = [
   { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["admin", "manager", "hr"] },
   { href: "/liabilities", label: "Liabilities", icon: CircleDollarSign, roles: ["admin", "manager"] },
   { href: "/packages", label: "Service Packages", icon: BoxSelect },
+  { href: "/accounting", label: "Accounting", icon: Scale, roles: ["admin", "accounting"] },
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/admin", label: "Admin Panel", icon: Shield, roles: ["admin"] },
   { href: "/profile", label: "My Profile", icon: UserCircle },
