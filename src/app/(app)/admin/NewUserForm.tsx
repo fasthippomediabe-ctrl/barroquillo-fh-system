@@ -39,8 +39,8 @@ export default function NewUserForm() {
           name="username"
           className="input"
           required
-          pattern="[a-z0-9_.\-]+"
-          placeholder="e.g., maria"
+          pattern="[A-Za-z0-9_.\-]+"
+          placeholder="e.g., maria (auto-lowercased)"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm font-semibold">
