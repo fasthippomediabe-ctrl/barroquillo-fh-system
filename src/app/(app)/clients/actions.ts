@@ -83,14 +83,20 @@ export async function updateClient(id: number, formData: FormData) {
   redirect(`/clients/${id}`);
 }
 
-export async function deleteClient(id: number) {
+export async function deleteClient(
+  id: number,
+): Promise<{ error?: string }> {
   const session = await auth();
   // biome-ignore lint/suspicious/noExplicitAny: session
   const role = (session?.user as any)?.role ?? "staff";
-  requireRole(role, ["admin", "manager"]);
+  if (!["admin", "manager"].includes(role)) {
+    return { error: "Only admins and managers can delete client records." };
+  }
   const svcCount = await prisma.service.count({ where: { clientId: id } });
   if (svcCount > 0) {
-    throw new Error("Cannot delete client with existing services");
+    return {
+      error: `Cannot delete: this record has ${svcCount} service${svcCount === 1 ? "" : "s"}. Cancel or remove the services first.`,
+    };
   }
   await prisma.client.delete({ where: { id } });
   revalidatePath("/clients");

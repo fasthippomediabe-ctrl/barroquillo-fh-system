@@ -11,13 +11,13 @@ export default function ChangePasswordForm() {
       action={(fd) =>
         start(async () => {
           setMsg(null);
-          try {
-            await changePassword(fd);
-            setMsg({ kind: "ok", text: "Password updated." });
-            (document.getElementById("pwdForm") as HTMLFormElement)?.reset();
-          } catch (e) {
-            setMsg({ kind: "err", text: (e as Error).message });
+          const res = await changePassword(fd);
+          if (res?.error) {
+            setMsg({ kind: "err", text: res.error });
+            return;
           }
+          setMsg({ kind: "ok", text: "Password updated." });
+          (document.getElementById("pwdForm") as HTMLFormElement)?.reset();
         })
       }
       id="pwdForm"

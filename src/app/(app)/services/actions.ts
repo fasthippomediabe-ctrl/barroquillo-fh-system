@@ -65,9 +65,12 @@ export async function setServiceStatus(id: number, status: "active" | "completed
   revalidatePath("/");
 }
 
-export async function recordPayment(serviceId: number, formData: FormData) {
+export async function recordPayment(
+  serviceId: number,
+  formData: FormData,
+): Promise<{ error?: string }> {
   const amount = num(formData.get("amount"));
-  if (amount <= 0) throw new Error("Amount must be > 0");
+  if (amount <= 0) return { error: "Amount must be greater than 0." };
   await prisma.payment.create({
     data: {
       serviceId,
@@ -82,6 +85,7 @@ export async function recordPayment(serviceId: number, formData: FormData) {
   revalidatePath(`/services/${serviceId}`);
   revalidatePath("/payments");
   revalidatePath("/");
+  return {};
 }
 
 export async function deletePayment(paymentId: number, serviceId: number) {

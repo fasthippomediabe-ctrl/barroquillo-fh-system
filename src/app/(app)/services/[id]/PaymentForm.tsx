@@ -12,7 +12,11 @@ export default function PaymentForm({ serviceId }: { serviceId: number }) {
       ref={formRef}
       action={(fd) =>
         start(async () => {
-          await recordPayment(serviceId, fd);
+          const res = await recordPayment(serviceId, fd);
+          if (res?.error) {
+            alert(res.error);
+            return;
+          }
           formRef.current?.reset();
         })
       }

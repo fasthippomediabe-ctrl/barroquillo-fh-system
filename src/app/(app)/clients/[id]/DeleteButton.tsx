@@ -12,11 +12,8 @@ export default function DeleteButton({ id }: { id: number }) {
       onClick={() => {
         if (!confirm("Delete this client record? Cannot be undone.")) return;
         start(async () => {
-          try {
-            await deleteClient(id);
-          } catch (e) {
-            alert((e as Error).message);
-          }
+          const result = await deleteClient(id);
+          if (result?.error) alert(result.error);
         });
       }}
     >
