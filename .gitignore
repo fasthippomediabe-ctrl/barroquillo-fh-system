@@ -48,3 +48,5 @@ next-env.d.ts
 /prisma/dev.db-shm
 /prisma/dev.db-wal
 # Note: prisma/seed.db IS committed — it's the first-boot snapshot for Render.
+
+.vercel
