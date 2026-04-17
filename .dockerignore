@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.env*
+!.env.example
+prisma/dev.db
+prisma/dev.db-journal
+# seed.db must NOT be ignored — Dockerfile copies it into the image for first-boot seeding.
+*.log
+/tmp

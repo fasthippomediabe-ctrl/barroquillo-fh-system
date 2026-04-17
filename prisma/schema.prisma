@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           Int     @id @default(autoincrement())
+  username     String  @unique
+  passwordHash String  @map("password_hash")
+  displayName  String  @map("display_name")
+  role         String  @default("staff")
+  isActive     Int     @default(1) @map("is_active")
+  createdAt    String? @map("created_at")
+
+  @@map("users")
+}
+
+model Account {
+  id             Int     @id @default(autoincrement())
+  name           String
+  type           String  @default("bank")
+  description    String?
+  openingBalance Float   @default(0) @map("opening_balance")
+  isActive       Int     @default(1) @map("is_active")
+  createdAt      String? @map("created_at")
+
+  expenses Expense[]
+
+  @@map("accounts")
+}
+
+model Client {
+  id                   Int     @id @default(autoincrement())
+  deceasedFirstName    String  @map("deceased_first_name")
+  deceasedLastName     String  @map("deceased_last_name")
+  deceasedMiddleName   String? @map("deceased_middle_name")
+  deceasedAge          Int?    @map("deceased_age")
+  deceasedGender       String? @map("deceased_gender")
+  deceasedBirthday     String? @map("deceased_birthday")
+  deceasedDateOfDeath  String? @map("deceased_date_of_death")
+  deceasedCauseOfDeath String? @map("deceased_cause_of_death")
+  deceasedAddress      String? @map("deceased_address")
+  contactName          String  @map("contact_name")
+  contactRelationship  String? @map("contact_relationship")
+  contactPhone         String? @map("contact_phone")
+  contactEmail         String? @map("contact_email")
+  contactAddress       String? @map("contact_address")
+  notes                String?
+  createdAt            String? @map("created_at")
+
+  services Service[]
+
+  @@map("clients")
+}
+
+model ServicePackage {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+  basePrice   Float   @default(0) @map("base_price")
+  isActive    Int     @default(1) @map("is_active")
+
+  services Service[]
+
+  @@map("service_packages")
+}
+
+model Service {
+  id                Int     @id @default(autoincrement())
+  clientId          Int     @map("client_id")
+  packageId         Int?    @map("package_id")
+  customServiceName String? @map("custom_service_name")
+  wakeStartDate     String? @map("wake_start_date")
+  wakeEndDate       String? @map("wake_end_date")
+  burialDate        String? @map("burial_date")
+  burialLocation    String? @map("burial_location")
+  totalAmount       Float   @default(0) @map("total_amount")
+  discount          Float   @default(0)
+  status            String  @default("active")
+  notes             String?
+  createdAt         String? @map("created_at")
+
+  client             Client              @relation(fields: [clientId], references: [id])
+  package            ServicePackage?     @relation(fields: [packageId], references: [id])
+  payments           Payment[]
+  expenses           Expense[]
+  inventoryMovements InventoryMovement[]
+
+  @@map("services")
+}
+
+model Payment {
+  id        Int     @id @default(autoincrement())
+  serviceId Int     @map("service_id")
+  date      String
+  amount    Float
+  method    String  @default("cash")
+  reference String?
+  notes     String?
+  createdAt String? @map("created_at")
+
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@map("payments")
+}
+
+model ExpenseCategory {
+  id       Int    @id @default(autoincrement())
+  name     String
+  color    String @default("#6c757d")
+  isActive Int    @default(1) @map("is_active")
+
+  expenses Expense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id          Int     @id @default(autoincrement())
+  date        String
+  categoryId  Int?    @map("category_id")
+  accountId   Int?    @map("account_id")
+  amount      Float
+  description String?
+  reference   String?
+  serviceId   Int?    @map("service_id")
+  createdAt   String? @map("created_at")
+
+  category ExpenseCategory? @relation(fields: [categoryId], references: [id])
+  account  Account?         @relation(fields: [accountId], references: [id])
+  service  Service?         @relation(fields: [serviceId], references: [id])
+
+  @@map("expenses")
+}
+
+model InventoryCategory {
+  id       Int    @id @default(autoincrement())
+  name     String
+  isActive Int    @default(1) @map("is_active")
+
+  items Inventory[]
+
+  @@map("inventory_categories")
+}
+
+model Inventory {
+  id           Int     @id @default(autoincrement())
+  categoryId   Int?    @map("category_id")
+  name         String
+  description  String?
+  unit         String  @default("pcs")
+  quantity     Float   @default(0)
+  reorderLevel Float   @default(0) @map("reorder_level")
+  costPerUnit  Float   @default(0) @map("cost_per_unit")
+  sellingPrice Float   @default(0) @map("selling_price")
+  location     String?
+  isActive     Int     @default(1) @map("is_active")
+  createdAt    String? @map("created_at")
+
+  category  InventoryCategory?  @relation(fields: [categoryId], references: [id])
+  movements InventoryMovement[]
+
+  @@map("inventory")
+}
+
+model InventoryMovement {
+  id        Int     @id @default(autoincrement())
+  itemId    Int     @map("item_id")
+  date      String
+  type      String
+  quantity  Float
+  unitCost  Float   @default(0) @map("unit_cost")
+  serviceId Int?    @map("service_id")
+  reference String?
+  notes     String?
+  createdAt String? @map("created_at")
+
+  item    Inventory @relation(fields: [itemId], references: [id])
+  service Service?  @relation(fields: [serviceId], references: [id])
+
+  @@map("inventory_movements")
+}
+
+model Liability {
+  id               Int     @id @default(autoincrement())
+  name             String
+  type             String  @default("loan")
+  creditor         String?
+  principalAmount  Float   @map("principal_amount")
+  remainingBalance Float   @map("remaining_balance")
+  interestRate     Float   @default(0) @map("interest_rate")
+  dueDate          String? @map("due_date")
+  monthlyPayment   Float   @default(0) @map("monthly_payment")
+  status           String  @default("active")
+  notes            String?
+  createdAt        String? @map("created_at")
+
+  payments LiabilityPayment[]
+
+  @@map("liabilities")
+}
+
+model LiabilityPayment {
+  id          Int     @id @default(autoincrement())
+  liabilityId Int     @map("liability_id")
+  date        String
+  amount      Float
+  notes       String?
+  createdAt   String? @map("created_at")
+
+  liability Liability @relation(fields: [liabilityId], references: [id])
+
+  @@map("liability_payments")
+}
+
+model Supplier {
+  id                Int     @id @default(autoincrement())
+  businessName      String  @map("business_name")
+  contactPerson     String? @map("contact_person")
+  phone             String?
+  email             String?
+  address           String?
+  bankName          String? @map("bank_name")
+  bankAccountName   String? @map("bank_account_name")
+  bankAccountNumber String? @map("bank_account_number")
+  gcashNumber       String? @map("gcash_number")
+  mayaNumber        String? @map("maya_number")
+  productsSupplied  String? @map("products_supplied")
+  paymentTerms      String? @map("payment_terms")
+  notes             String?
+  isActive          Int     @default(1) @map("is_active")
+  createdAt         String? @map("created_at")
+
+  @@map("suppliers")
+}

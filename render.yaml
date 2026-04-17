@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: barroquillo-fh
+    runtime: docker
+    plan: starter
+    healthCheckPath: /login
+    disk:
+      name: barroquillo-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: "file:/data/barroquillo.db"
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: NODE_ENV
+        value: production
