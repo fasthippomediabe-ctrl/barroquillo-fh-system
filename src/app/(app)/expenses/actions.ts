@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { put, del } from "@vercel/blob";
 
 async function checkRole(
   allowed: string[],
@@ -26,6 +27,38 @@ function n(v: FormDataEntryValue | null): number {
 function optInt(v: FormDataEntryValue | null): number | null {
   const x = s(v);
   return x ? Number(x) : null;
+}
+
+const MAX_RECEIPT_BYTES = 4 * 1024 * 1024; // 4 MB (server-action body limit safe zone)
+const ALLOWED_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "application/pdf",
+]);
+
+async function uploadReceipt(
+  file: File,
+): Promise<{ url: string; filename: string } | { error: string }> {
+  if (!file.size) return { error: "Receipt file is empty." };
+  if (file.size > MAX_RECEIPT_BYTES)
+    return { error: "Receipt must be 4 MB or smaller." };
+  if (file.type && !ALLOWED_TYPES.has(file.type))
+    return {
+      error: "Only JPG, PNG, WebP, HEIC, or PDF receipts are supported.",
+    };
+  const safeBase = file.name
+    .replace(/[^\w.\-]+/g, "_")
+    .replace(/_+/g, "_")
+    .slice(-80);
+  const key = `receipts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeBase}`;
+  const blob = await put(key, file, {
+    access: "public",
+    contentType: file.type || undefined,
+  });
+  return { url: blob.url, filename: file.name };
 }
 
 async function resolveCategoryId(
@@ -57,6 +90,16 @@ export async function createExpense(
 
   const categoryId = await resolveCategoryId(formData);
 
+  let receiptUrl: string | null = null;
+  let receiptFilename: string | null = null;
+  const file = formData.get("receipt");
+  if (file instanceof File && file.size > 0) {
+    const up = await uploadReceipt(file);
+    if ("error" in up) return { error: up.error };
+    receiptUrl = up.url;
+    receiptFilename = up.filename;
+  }
+
   await prisma.expense.create({
     data: {
       date,
@@ -66,6 +109,8 @@ export async function createExpense(
       serviceId: optInt(formData.get("serviceId")),
       description: s(formData.get("description")),
       reference: s(formData.get("reference")),
+      receiptUrl,
+      receiptFilename,
       createdAt: new Date().toISOString(),
     },
   });
@@ -88,6 +133,39 @@ export async function updateExpense(
 
   const categoryId = await resolveCategoryId(formData);
 
+  const existing = await prisma.expense.findUnique({ where: { id } });
+  if (!existing) return { error: "Expense not found." };
+
+  const removeReceipt = s(formData.get("removeReceipt")) === "1";
+  const file = formData.get("receipt");
+  const hasNewFile = file instanceof File && file.size > 0;
+
+  let receiptUrl = existing.receiptUrl;
+  let receiptFilename = existing.receiptFilename;
+
+  if (hasNewFile) {
+    const up = await uploadReceipt(file as File);
+    if ("error" in up) return { error: up.error };
+    // Replace: drop the old blob first, then set the new one.
+    if (existing.receiptUrl) {
+      try {
+        await del(existing.receiptUrl);
+      } catch {
+        /* non-fatal; old blob may be gone already */
+      }
+    }
+    receiptUrl = up.url;
+    receiptFilename = up.filename;
+  } else if (removeReceipt && existing.receiptUrl) {
+    try {
+      await del(existing.receiptUrl);
+    } catch {
+      /* non-fatal */
+    }
+    receiptUrl = null;
+    receiptFilename = null;
+  }
+
   await prisma.expense.update({
     where: { id },
     data: {
@@ -98,6 +176,8 @@ export async function updateExpense(
       serviceId: optInt(formData.get("serviceId")),
       description: s(formData.get("description")),
       reference: s(formData.get("reference")),
+      receiptUrl,
+      receiptFilename,
     },
   });
   revalidatePath("/expenses");
@@ -109,6 +189,14 @@ export async function updateExpense(
 export async function deleteExpense(id: number): Promise<{ error?: string }> {
   const gate = await checkRole(["admin", "manager", "accounting"]);
   if (!gate.ok) return { error: gate.error };
+  const existing = await prisma.expense.findUnique({ where: { id } });
+  if (existing?.receiptUrl) {
+    try {
+      await del(existing.receiptUrl);
+    } catch {
+      /* non-fatal */
+    }
+  }
   await prisma.expense.delete({ where: { id } });
   revalidatePath("/expenses");
   revalidatePath("/");

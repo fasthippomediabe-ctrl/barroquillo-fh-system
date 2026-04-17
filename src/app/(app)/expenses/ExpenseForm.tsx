@@ -14,6 +14,8 @@ type Initial = {
   serviceId?: number | null;
   description?: string | null;
   reference?: string | null;
+  receiptUrl?: string | null;
+  receiptFilename?: string | null;
 };
 
 export default function ExpenseForm({
@@ -50,6 +52,7 @@ export default function ExpenseForm({
         })
       }
       className="flex flex-col gap-4"
+      encType="multipart/form-data"
     >
       <div className="card grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-sm font-semibold">
@@ -158,6 +161,41 @@ export default function ExpenseForm({
             className="input"
           />
         </label>
+
+        <div className="flex flex-col gap-1 text-sm font-semibold md:col-span-2">
+          <span>Receipt (JPG, PNG, PDF — max 4 MB)</span>
+          {initial?.receiptUrl && (
+            <div className="flex items-center gap-3 bg-[var(--brand-bg-alt)] rounded-lg p-2 text-sm">
+              <a
+                href={initial.receiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--brand-blue)] hover:underline font-semibold"
+              >
+                📎 {initial.receiptFilename ?? "Current receipt"}
+              </a>
+              <label className="ml-auto flex items-center gap-1 text-xs font-normal text-[#c0392b]">
+                <input
+                  type="checkbox"
+                  name="removeReceipt"
+                  value="1"
+                />
+                Remove on save
+              </label>
+            </div>
+          )}
+          <input
+            type="file"
+            name="receipt"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf"
+            className="input !py-1.5"
+          />
+          {initial?.receiptUrl && (
+            <span className="text-xs text-[#4a5678] font-normal">
+              Picking a new file replaces the existing one.
+            </span>
+          )}
+        </div>
       </div>
 
       {err && (

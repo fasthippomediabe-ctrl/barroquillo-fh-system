@@ -120,15 +120,17 @@ model ExpenseCategory {
 }
 
 model Expense {
-  id          Int     @id @default(autoincrement())
-  date        String
-  categoryId  Int?    @map("category_id")
-  accountId   Int?    @map("account_id")
-  amount      Float
-  description String?
-  reference   String?
-  serviceId   Int?    @map("service_id")
-  createdAt   String? @map("created_at")
+  id              Int     @id @default(autoincrement())
+  date            String
+  categoryId      Int?    @map("category_id")
+  accountId       Int?    @map("account_id")
+  amount          Float
+  description     String?
+  reference       String?
+  serviceId       Int?    @map("service_id")
+  receiptUrl      String? @map("receipt_url")
+  receiptFilename String? @map("receipt_filename")
+  createdAt       String? @map("created_at")
 
   category ExpenseCategory? @relation(fields: [categoryId], references: [id])
   account  Account?         @relation(fields: [accountId], references: [id])

@@ -41,13 +41,14 @@ export default async function ExpensesPage() {
                 <th>Description</th>
                 <th>Service</th>
                 <th>Reference</th>
+                <th>Receipt</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {expenses.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center text-[#4a5678] py-8">
+                  <td colSpan={9} className="text-center text-[#4a5678] py-8">
                     No expenses recorded.
                   </td>
                 </tr>
@@ -79,6 +80,21 @@ export default async function ExpensesPage() {
                         : "—"}
                     </td>
                     <td>{e.reference ?? "—"}</td>
+                    <td>
+                      {e.receiptUrl ? (
+                        <a
+                          href={e.receiptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[var(--brand-blue)] hover:underline text-xs font-semibold"
+                          title={e.receiptFilename ?? "View receipt"}
+                        >
+                          📎 View
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>
                       <RowActions id={e.id} />
                     </td>
