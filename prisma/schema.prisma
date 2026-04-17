@@ -232,6 +232,54 @@ model ProfitShare {
   @@map("profit_shares")
 }
 
+model PayrollPeriod {
+  id         Int     @id @default(autoincrement())
+  periodName String  @map("period_name")
+  startDate  String  @map("start_date")
+  endDate    String  @map("end_date")
+  payDate    String? @map("pay_date")
+  status     String  @default("draft")
+  notes      String?
+  createdAt  String? @map("created_at")
+
+  entries PayrollEntry[]
+
+  @@map("payroll_periods")
+}
+
+model PayrollEntry {
+  id                  Int     @id @default(autoincrement())
+  periodId            Int     @map("period_id")
+  employeeId          Int     @map("employee_id")
+  basicPay            Float   @default(0) @map("basic_pay")
+  overtimePay         Float   @default(0) @map("overtime_pay")
+  holidayPay          Float   @default(0) @map("holiday_pay")
+  bonus               Float   @default(0)
+  otherEarnings       Float   @default(0) @map("other_earnings")
+  otherEarningsNote   String? @map("other_earnings_note")
+  sss                 Float   @default(0)
+  philhealth          Float   @default(0)
+  pagibig             Float   @default(0)
+  tax                 Float   @default(0)
+  cashAdvance         Float   @default(0) @map("cash_advance")
+  absences            Float   @default(0)
+  lateDeductions      Float   @default(0) @map("late_deductions")
+  otherDeductions     Float   @default(0) @map("other_deductions")
+  otherDeductionsNote String? @map("other_deductions_note")
+  grossPay            Float   @default(0) @map("gross_pay")
+  totalDeductions     Float   @default(0) @map("total_deductions")
+  netPay              Float   @default(0) @map("net_pay")
+  isPaid              Int     @default(0) @map("is_paid")
+  paidVia             String? @map("paid_via")
+  notes               String?
+  createdAt           String? @map("created_at")
+
+  period   PayrollPeriod @relation(fields: [periodId], references: [id])
+  employee Employee      @relation(fields: [employeeId], references: [id])
+
+  @@map("payroll_entries")
+}
+
 model Employee {
   id                    Int     @id @default(autoincrement())
   firstName             String  @map("first_name")
@@ -264,6 +312,8 @@ model Employee {
   notes                 String?
   isActive              Int     @default(1) @map("is_active")
   createdAt             String? @map("created_at")
+
+  payrollEntries PayrollEntry[]
 
   @@map("employees")
 }
