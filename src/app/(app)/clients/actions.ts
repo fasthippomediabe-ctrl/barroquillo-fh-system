@@ -92,13 +92,38 @@ export async function deleteClient(
   if (!["admin", "manager"].includes(role)) {
     return { error: "Only admins and managers can delete client records." };
   }
-  const svcCount = await prisma.service.count({ where: { clientId: id } });
-  if (svcCount > 0) {
+
+  const services = await prisma.service.findMany({
+    where: { clientId: id },
+    select: { id: true, status: true },
+  });
+  const blocking = services.filter((s) => s.status !== "cancelled");
+  if (blocking.length > 0) {
     return {
-      error: `Cannot delete: this record has ${svcCount} service${svcCount === 1 ? "" : "s"}. Cancel or remove the services first.`,
+      error: `Cannot delete: this record has ${blocking.length} active/completed service${blocking.length === 1 ? "" : "s"}. Cancel or delete them first.`,
     };
   }
-  await prisma.client.delete({ where: { id } });
+
+  // Cancelled services get cascaded. Preserve financial history on expenses
+  // and inventory_movements by nulling out the service link rather than
+  // deleting those rows.
+  const serviceIds = services.map((s) => s.id);
+  await prisma.$transaction(async (tx) => {
+    if (serviceIds.length > 0) {
+      await tx.payment.deleteMany({ where: { serviceId: { in: serviceIds } } });
+      await tx.expense.updateMany({
+        where: { serviceId: { in: serviceIds } },
+        data: { serviceId: null },
+      });
+      await tx.inventoryMovement.updateMany({
+        where: { serviceId: { in: serviceIds } },
+        data: { serviceId: null },
+      });
+      await tx.service.deleteMany({ where: { id: { in: serviceIds } } });
+    }
+    await tx.client.delete({ where: { id } });
+  });
+
   revalidatePath("/clients");
   redirect("/clients");
 }
