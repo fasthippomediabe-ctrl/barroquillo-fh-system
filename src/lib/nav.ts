@@ -12,13 +12,14 @@ import {
   FileText,
   Shield,
   UserCircle,
+  IdCard,
 } from "lucide-react";
 
 export type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
-  roles?: ("admin" | "manager" | "staff")[];
+  roles?: ("admin" | "manager" | "staff" | "hr" | "accounting")[];
 };
 
 export const nav: NavItem[] = [
@@ -29,7 +30,8 @@ export const nav: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/suppliers", label: "Suppliers", icon: Truck },
   { href: "/expenses", label: "Expenses", icon: Receipt },
-  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["admin", "manager"] },
+  { href: "/employees", label: "Employees", icon: IdCard, roles: ["admin", "manager", "hr"] },
+  { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["admin", "manager", "hr"] },
   { href: "/liabilities", label: "Liabilities", icon: CircleDollarSign, roles: ["admin", "manager"] },
   { href: "/packages", label: "Service Packages", icon: BoxSelect },
   { href: "/reports", label: "Reports", icon: FileText },

@@ -15,7 +15,11 @@ export default function Sidebar({
 }) {
   const pathname = usePathname();
   const visible = nav.filter(
-    (n) => !n.roles || n.roles.includes(role as "admin" | "manager" | "staff"),
+    (n) =>
+      !n.roles ||
+      n.roles.includes(
+        role as "admin" | "manager" | "staff" | "hr" | "accounting",
+      ),
   );
   return (
     <aside className="sidebar w-64 shrink-0 min-h-screen flex flex-col no-print">
