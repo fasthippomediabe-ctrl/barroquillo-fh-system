@@ -76,12 +76,13 @@ async function HistoryTab() {
                 <th>Method</th>
                 <th>Reference</th>
                 <th>Notes</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {payments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-[#4a5678] py-8">
+                  <td colSpan={8} className="text-center text-[#4a5678] py-8">
                     No payments recorded.
                   </td>
                 </tr>
@@ -103,6 +104,14 @@ async function HistoryTab() {
                     <td className="capitalize">{p.method}</td>
                     <td>{p.reference ?? "—"}</td>
                     <td>{p.notes ?? "—"}</td>
+                    <td>
+                      <Link
+                        href={`/payments/${p.id}/edit`}
+                        className="text-[var(--brand-blue)] hover:underline text-xs font-semibold"
+                      >
+                        Edit
+                      </Link>
+                    </td>
                   </tr>
                 ))
               )}

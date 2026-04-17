@@ -1,12 +1,18 @@
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { fmt, fmtDate } from "@/lib/format";
+import RowActions from "./RowActions";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExpensesPage() {
   const expenses = await prisma.expense.findMany({
-    include: { category: true, account: true, service: { include: { client: true } } },
+    include: {
+      category: true,
+      account: true,
+      service: { include: { client: true } },
+    },
     orderBy: [{ date: "desc" }, { id: "desc" }],
     take: 200,
   });
@@ -17,6 +23,11 @@ export default async function ExpensesPage() {
       <PageHeader
         title="Expenses"
         subtitle={`Latest 200 entries · ${fmt(total)}`}
+        actions={
+          <Link href="/expenses/new" className="btn-primary">
+            + New Expense
+          </Link>
+        }
       />
       <div className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
@@ -30,12 +41,13 @@ export default async function ExpensesPage() {
                 <th>Description</th>
                 <th>Service</th>
                 <th>Reference</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {expenses.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center text-[#4a5678] py-8">
+                  <td colSpan={8} className="text-center text-[#4a5678] py-8">
                     No expenses recorded.
                   </td>
                 </tr>
@@ -67,6 +79,9 @@ export default async function ExpensesPage() {
                         : "—"}
                     </td>
                     <td>{e.reference ?? "—"}</td>
+                    <td>
+                      <RowActions id={e.id} />
+                    </td>
                   </tr>
                 ))
               )}

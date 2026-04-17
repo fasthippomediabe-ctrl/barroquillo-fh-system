@@ -139,7 +139,15 @@ export default async function ServiceDetailPage({
                     <td>{p.reference ?? "—"}</td>
                     <td>{p.notes ?? "—"}</td>
                     <td className="no-print">
-                      <DeletePaymentButton paymentId={p.id} serviceId={id} />
+                      <div className="flex gap-2">
+                        <Link
+                          href={`/payments/${p.id}/edit`}
+                          className="text-[var(--brand-blue)] hover:underline text-xs font-semibold"
+                        >
+                          Edit
+                        </Link>
+                        <DeletePaymentButton paymentId={p.id} serviceId={id} />
+                      </div>
                     </td>
                   </tr>
                 ))}

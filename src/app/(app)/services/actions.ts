@@ -94,3 +94,29 @@ export async function deletePayment(paymentId: number, serviceId: number) {
   revalidatePath("/payments");
   revalidatePath("/");
 }
+
+export async function updatePayment(
+  paymentId: number,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const amount = num(formData.get("amount"));
+  if (amount <= 0) return { error: "Amount must be greater than 0." };
+  const existing = await prisma.payment.findUnique({
+    where: { id: paymentId },
+  });
+  if (!existing) return { error: "Payment not found." };
+  await prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      date: s(formData.get("date")) ?? existing.date,
+      amount,
+      method: s(formData.get("method")) ?? "cash",
+      reference: s(formData.get("reference")),
+      notes: s(formData.get("notes")),
+    },
+  });
+  revalidatePath(`/services/${existing.serviceId}`);
+  revalidatePath("/payments");
+  revalidatePath("/");
+  return {};
+}

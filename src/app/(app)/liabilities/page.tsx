@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { fmt, fmtDate } from "@/lib/format";
 
@@ -6,8 +7,8 @@ export const dynamic = "force-dynamic";
 
 export default async function LiabilitiesPage() {
   const liabilities = await prisma.liability.findMany({
-    include: { payments: { orderBy: { date: "desc" } } },
-    orderBy: { dueDate: "asc" },
+    include: { _count: { select: { payments: true } } },
+    orderBy: [{ status: "asc" }, { dueDate: "asc" }],
   });
   const totalRemaining = liabilities
     .filter((l) => l.status === "active")
@@ -18,6 +19,11 @@ export default async function LiabilitiesPage() {
       <PageHeader
         title="Liabilities"
         subtitle={`${liabilities.filter((l) => l.status === "active").length} active · ${fmt(totalRemaining)} outstanding`}
+        actions={
+          <Link href="/liabilities/new" className="btn-primary">
+            + New Liability
+          </Link>
+        }
       />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {liabilities.length === 0 ? (
@@ -26,15 +32,23 @@ export default async function LiabilitiesPage() {
           </div>
         ) : (
           liabilities.map((l) => (
-            <div key={l.id} className="card">
-              <div className="flex justify-between">
+            <Link
+              key={l.id}
+              href={`/liabilities/${l.id}`}
+              className="card hover:shadow-md transition-shadow"
+            >
+              <div className="flex justify-between items-start">
                 <h3 className="font-bold text-[var(--brand-navy)]">{l.name}</h3>
-                <span className={`badge badge-${l.status === "active" ? "warn" : "active"}`}>
+                <span
+                  className={`badge badge-${l.status === "active" ? "warn" : l.status === "paid" ? "active" : "cancelled"}`}
+                >
                   {l.status}
                 </span>
               </div>
               {l.creditor && (
-                <div className="text-sm text-[#4a5678]">Creditor: {l.creditor}</div>
+                <div className="text-sm text-[#4a5678]">
+                  Creditor: {l.creditor}
+                </div>
               )}
               <div className="grid grid-cols-2 gap-2 mt-3 text-sm">
                 <div>
@@ -48,7 +62,7 @@ export default async function LiabilitiesPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-[#4a5678]">Monthly Payment</div>
+                  <div className="text-xs text-[#4a5678]">Monthly</div>
                   <div>{fmt(l.monthlyPayment)}</div>
                 </div>
                 <div>
@@ -56,22 +70,11 @@ export default async function LiabilitiesPage() {
                   <div>{fmtDate(l.dueDate)}</div>
                 </div>
               </div>
-              {l.payments.length > 0 && (
-                <details className="mt-3 text-sm">
-                  <summary className="cursor-pointer font-semibold">
-                    Payments ({l.payments.length})
-                  </summary>
-                  <ul className="mt-2 text-xs">
-                    {l.payments.map((p) => (
-                      <li key={p.id} className="flex justify-between py-1 border-b border-[#e5ebf5]">
-                        <span>{fmtDate(p.date)}</span>
-                        <span className="font-semibold">{fmt(p.amount)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
+              <div className="mt-3 pt-3 border-t border-[#e5ebf5] text-xs text-[#4a5678]">
+                {l._count.payments} payment
+                {l._count.payments === 1 ? "" : "s"} recorded
+              </div>
+            </Link>
           ))
         )}
       </div>
