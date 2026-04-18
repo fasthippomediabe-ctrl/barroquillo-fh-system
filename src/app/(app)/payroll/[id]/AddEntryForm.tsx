@@ -34,7 +34,22 @@ export default function AddEntryForm({
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [empId, setEmpId] = useState<string>("");
+  const [daysOrHours, setDaysOrHours] = useState<string>("");
+  const [basicPay, setBasicPay] = useState<string>("0");
   const formRef = useRef<HTMLFormElement>(null);
+
+  const selectedEmp = employees.find((e) => String(e.id) === empId);
+  const isDaily = selectedEmp?.rateType === "daily";
+  const isHourly = selectedEmp?.rateType === "hourly";
+  const unitRate = selectedEmp?.rateAmount ?? 0;
+
+  const onDaysOrHoursChange = (v: string) => {
+    setDaysOrHours(v);
+    const n = Number(v);
+    if (Number.isFinite(n) && n >= 0 && unitRate > 0) {
+      setBasicPay((n * unitRate).toFixed(2));
+    }
+  };
 
   const periodDays =
     (new Date(periodEnd).getTime() - new Date(periodStart).getTime()) /
@@ -42,6 +57,10 @@ export default function AddEntryForm({
     1;
   const semi = periodDays <= 17;
 
+  // When employee changes, reset the days/hours input and seed the basic
+  // pay from the rate-aware seed computed below.
+  // (useMemo runs BEFORE state changes fire, so we just wire onChange on the select
+  //  to clear these fields.)
   const seed = useMemo(() => {
     const emp = employees.find((e) => String(e.id) === empId);
     if (!emp) return null;
@@ -63,7 +82,7 @@ export default function AddEntryForm({
         philhealth: 0,
         pagibig: 0,
         tax: 0,
-        hint: `Rate: ₱${emp.rateAmount.toFixed(2)} / ${emp.rateType}. Enter basic pay manually.`,
+        hint: `Rate: ₱${emp.rateAmount.toFixed(2)} / ${emp.rateType}. Enter ${emp.rateType === "daily" ? "days" : "hours"} worked below to auto-compute basic pay.`,
       };
     }
 
@@ -111,7 +130,23 @@ export default function AddEntryForm({
           Employee
           <select
             value={empId}
-            onChange={(e) => setEmpId(e.target.value)}
+            onChange={(e) => {
+              setEmpId(e.target.value);
+              setDaysOrHours("");
+              const emp = employees.find(
+                (x) => String(x.id) === e.target.value,
+              );
+              // reset basic pay to the seed for this employee
+              if (emp?.rateType === "monthly") {
+                const monthly = emp.rateAmount;
+                const bp = monthly > 0 ? (semi ? monthly / 2 : monthly) : 0;
+                setBasicPay(bp.toFixed(2));
+              } else if (emp?.rateType === "per_service") {
+                setBasicPay((emp.perServiceFees ?? 0).toFixed(2));
+              } else {
+                setBasicPay("0");
+              }
+            }}
             className="select"
           >
             <option value="">— Select —</option>
@@ -128,13 +163,31 @@ export default function AddEntryForm({
             </span>
           )}
         </label>
+        {(isDaily || isHourly) && (
+          <label className="flex flex-col gap-1 text-sm font-semibold">
+            {isDaily ? "Days Worked" : "Hours Worked"}
+            <input
+              type="number"
+              step={isHourly ? "0.25" : "0.5"}
+              min="0"
+              value={daysOrHours}
+              onChange={(e) => onDaysOrHoursChange(e.target.value)}
+              className="input"
+              placeholder={isDaily ? "e.g., 13" : "e.g., 104"}
+            />
+            <span className="text-xs font-normal text-[#4a5678]">
+              Rate ₱{unitRate.toFixed(2)} / {isDaily ? "day" : "hour"}
+            </span>
+          </label>
+        )}
         <label className="flex flex-col gap-1 text-sm font-semibold">
           Basic Pay
           <input
             name="basicPay"
             type="number"
             step="0.01"
-            defaultValue={seed?.basicPay ?? 0}
+            value={basicPay}
+            onChange={(e) => setBasicPay(e.target.value)}
             className="input"
           />
         </label>
