@@ -6,6 +6,7 @@ import { fmt, fmtDate } from "@/lib/format";
 import LiabilityPaymentForm from "./LiabilityPaymentForm";
 import DeleteLiabilityButton from "./DeleteLiabilityButton";
 import DeletePaymentButton from "./DeletePaymentButton";
+import { listAttachmentsMany } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,10 @@ export default async function LiabilityDetailPage({
     include: { payments: { orderBy: [{ date: "desc" }, { id: "desc" }] } },
   });
   if (!l) notFound();
+  const attachMap = await listAttachmentsMany(
+    "liability_payment",
+    l.payments.map((p) => p.id),
+  );
 
   const paid = l.principalAmount - l.remainingBalance;
   const pct = l.principalAmount > 0 ? paid / l.principalAmount : 0;
@@ -102,23 +107,60 @@ export default async function LiabilityDetailPage({
                   <th>Date</th>
                   <th>Amount</th>
                   <th>Notes</th>
+                  <th>Receipts</th>
                   <th className="no-print"></th>
                 </tr>
               </thead>
               <tbody>
-                {l.payments.map((p) => (
-                  <tr key={p.id}>
-                    <td>{fmtDate(p.date)}</td>
-                    <td className="font-semibold">{fmt(p.amount)}</td>
-                    <td>{p.notes ?? "—"}</td>
-                    <td className="no-print">
-                      <DeletePaymentButton
-                        paymentId={p.id}
-                        liabilityId={id}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {l.payments.map((p) => {
+                  const atts = attachMap.get(p.id) ?? [];
+                  return (
+                    <tr key={p.id}>
+                      <td>{fmtDate(p.date)}</td>
+                      <td className="font-semibold">{fmt(p.amount)}</td>
+                      <td>{p.notes ?? "—"}</td>
+                      <td>
+                        {atts.length === 0 ? (
+                          "—"
+                        ) : (
+                          <details>
+                            <summary className="cursor-pointer text-[var(--brand-blue)] text-xs font-semibold">
+                              📎 {atts.length}
+                            </summary>
+                            <ul className="mt-1 flex flex-col gap-0.5 text-xs">
+                              {atts.map((a) => (
+                                <li key={a.id}>
+                                  <a
+                                    href={a.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[var(--brand-blue)] hover:underline"
+                                  >
+                                    {a.filename}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </td>
+                      <td className="no-print">
+                        <div className="flex gap-2">
+                          <Link
+                            href={`/liabilities/${id}/payments/${p.id}/edit`}
+                            className="text-[var(--brand-blue)] hover:underline text-xs font-semibold"
+                          >
+                            Edit
+                          </Link>
+                          <DeletePaymentButton
+                            paymentId={p.id}
+                            liabilityId={id}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

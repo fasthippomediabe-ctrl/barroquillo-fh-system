@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageHeader, BackLink } from "@/components/PageHeader";
 import ExpenseForm from "../../ExpenseForm";
 import { updateExpense } from "../../actions";
+import { listAttachments } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
 
@@ -15,22 +16,24 @@ export default async function EditExpensePage({
   const id = Number(idStr);
   if (!Number.isFinite(id)) notFound();
 
-  const [expense, categories, accounts, services] = await Promise.all([
-    prisma.expense.findUnique({ where: { id } }),
-    prisma.expenseCategory.findMany({
-      where: { isActive: 1 },
-      orderBy: { name: "asc" },
-    }),
-    prisma.account.findMany({
-      where: { isActive: 1 },
-      orderBy: { name: "asc" },
-    }),
-    prisma.service.findMany({
-      include: { client: true },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    }),
-  ]);
+  const [expense, categories, accounts, services, attachments] =
+    await Promise.all([
+      prisma.expense.findUnique({ where: { id } }),
+      prisma.expenseCategory.findMany({
+        where: { isActive: 1 },
+        orderBy: { name: "asc" },
+      }),
+      prisma.account.findMany({
+        where: { isActive: 1 },
+        orderBy: { name: "asc" },
+      }),
+      prisma.service.findMany({
+        include: { client: true },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      }),
+      listAttachments("expense", id),
+    ]);
   if (!expense) notFound();
 
   async function action(fd: FormData) {
@@ -52,6 +55,7 @@ export default async function EditExpensePage({
           id: s.id,
           label: `${s.client.deceasedFirstName} ${s.client.deceasedLastName}`,
         }))}
+        attachments={attachments}
       />
     </div>
   );

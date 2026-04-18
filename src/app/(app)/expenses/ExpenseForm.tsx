@@ -1,6 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import AttachmentInput, {
+  type AttachmentLite,
+} from "@/components/AttachmentInput";
 
 type CategoryOpt = { id: number; name: string };
 type AccountOpt = { id: number; name: string };
@@ -24,6 +27,7 @@ export default function ExpenseForm({
   categories,
   accounts,
   services,
+  attachments = [],
   submitLabel = "Save",
 }: {
   action: (fd: FormData) => Promise<{ error?: string } | void>;
@@ -31,6 +35,7 @@ export default function ExpenseForm({
   categories: CategoryOpt[];
   accounts: AccountOpt[];
   services: ServiceOpt[];
+  attachments?: AttachmentLite[];
   submitLabel?: string;
 }) {
   const [pending, start] = useTransition();
@@ -195,6 +200,14 @@ export default function ExpenseForm({
               Picking a new file replaces the existing one.
             </span>
           )}
+        </div>
+
+        <div className="md:col-span-2">
+          <AttachmentInput
+            existing={attachments}
+            label="Additional Receipts (attach multiple)"
+            hint="Add any number of extra receipts. JPG, PNG, WebP, HEIC, or PDF — up to 4 MB each."
+          />
         </div>
       </div>
 

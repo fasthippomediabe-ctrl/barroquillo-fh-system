@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { fmt, fmtDate } from "@/lib/format";
 import RowActions from "./RowActions";
+import { listAttachmentsMany } from "@/lib/attachments";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,10 @@ export default async function ExpensesPage() {
     take: 200,
   });
   const total = expenses.reduce((a, e) => a + e.amount, 0);
+  const attachMap = await listAttachmentsMany(
+    "expense",
+    expenses.map((e) => e.id),
+  );
 
   return (
     <div>
@@ -81,19 +86,11 @@ export default async function ExpensesPage() {
                     </td>
                     <td>{e.reference ?? "—"}</td>
                     <td>
-                      {e.receiptUrl ? (
-                        <a
-                          href={e.receiptUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[var(--brand-blue)] hover:underline text-xs font-semibold"
-                          title={e.receiptFilename ?? "View receipt"}
-                        >
-                          📎 View
-                        </a>
-                      ) : (
-                        "—"
-                      )}
+                      <ReceiptCell
+                        receiptUrl={e.receiptUrl}
+                        receiptFilename={e.receiptFilename}
+                        attachments={attachMap.get(e.id) ?? []}
+                      />
                     </td>
                     <td>
                       <RowActions id={e.id} />
@@ -105,6 +102,58 @@ export default async function ExpensesPage() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReceiptCell({
+  receiptUrl,
+  receiptFilename,
+  attachments,
+}: {
+  receiptUrl: string | null;
+  receiptFilename: string | null;
+  attachments: { id: number; url: string; filename: string }[];
+}) {
+  const items: { url: string; filename: string | null }[] = [];
+  if (receiptUrl)
+    items.push({ url: receiptUrl, filename: receiptFilename });
+  for (const a of attachments)
+    items.push({ url: a.url, filename: a.filename });
+  if (items.length === 0) return <span>—</span>;
+  const [first, ...rest] = items;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <a
+        href={first.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[var(--brand-blue)] hover:underline text-xs font-semibold"
+        title={first.filename ?? "View receipt"}
+      >
+        📎 {items.length === 1 ? "View" : `${items.length} files`}
+      </a>
+      {rest.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-[#4a5678]">
+            show all
+          </summary>
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {items.map((it, i) => (
+              <li key={i}>
+                <a
+                  href={it.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--brand-blue)] hover:underline"
+                >
+                  {it.filename ?? `Receipt ${i + 1}`}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

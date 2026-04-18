@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import {
+  uploadAttachments,
+  deleteAttachmentsByIds,
+  deleteAllAttachmentsFor,
+  idsFromForm,
+} from "@/lib/attachments";
 
 async function checkRole(): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
@@ -106,8 +112,8 @@ export async function recordLiabilityPayment(
   const date =
     s(formData.get("date")) ?? new Date().toISOString().slice(0, 10);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.liabilityPayment.create({
+  const created = await prisma.$transaction(async (tx) => {
+    const pay = await tx.liabilityPayment.create({
       data: {
         liabilityId,
         date,
@@ -127,9 +133,81 @@ export async function recordLiabilityPayment(
         },
       });
     }
+    return pay;
   });
+
+  const attach = await uploadAttachments(
+    "liability_payment",
+    created.id,
+    formData,
+  );
+  if (attach.error) return { error: attach.error };
+
   revalidatePath("/liabilities");
   revalidatePath(`/liabilities/${liabilityId}`);
+  return {};
+}
+
+export async function updateLiabilityPayment(
+  paymentId: number,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const gate = await checkRole();
+  if (!gate.ok) return { error: gate.error };
+  const amount = num(formData.get("amount"));
+  if (amount <= 0) return { error: "Amount must be greater than 0." };
+  const date =
+    s(formData.get("date")) ?? new Date().toISOString().slice(0, 10);
+
+  const existing = await prisma.liabilityPayment.findUnique({
+    where: { id: paymentId },
+  });
+  if (!existing) return { error: "Payment not found." };
+
+  await prisma.$transaction(async (tx) => {
+    const delta = amount - existing.amount;
+    await tx.liabilityPayment.update({
+      where: { id: paymentId },
+      data: {
+        date,
+        amount,
+        notes: s(formData.get("notes")),
+      },
+    });
+    if (delta !== 0) {
+      const liab = await tx.liability.findUnique({
+        where: { id: existing.liabilityId },
+      });
+      if (liab) {
+        const newBal = Math.max(0, liab.remainingBalance - delta);
+        await tx.liability.update({
+          where: { id: existing.liabilityId },
+          data: {
+            remainingBalance: newBal,
+            status:
+              newBal === 0
+                ? "paid"
+                : liab.status === "paid"
+                  ? "active"
+                  : liab.status,
+          },
+        });
+      }
+    }
+  });
+
+  const removeIds = idsFromForm(formData, "removeAttachmentId");
+  if (removeIds.length > 0) await deleteAttachmentsByIds(removeIds);
+
+  const attach = await uploadAttachments(
+    "liability_payment",
+    paymentId,
+    formData,
+  );
+  if (attach.error) return { error: attach.error };
+
+  revalidatePath(`/liabilities/${existing.liabilityId}`);
+  revalidatePath("/liabilities");
   return {};
 }
 
@@ -156,6 +234,7 @@ export async function deleteLiabilityPayment(
       });
     }
   });
+  await deleteAllAttachmentsFor("liability_payment", paymentId);
   revalidatePath(`/liabilities/${liabilityId}`);
   revalidatePath("/liabilities");
   return {};
