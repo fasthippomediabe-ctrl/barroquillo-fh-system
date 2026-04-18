@@ -15,10 +15,14 @@ export default async function EditServicePage({
   const id = Number(idStr);
   if (!Number.isFinite(id)) notFound();
 
-  const [svc, clients, packages] = await Promise.all([
+  const [svc, clients, packages, embalmers] = await Promise.all([
     prisma.service.findUnique({ where: { id }, include: { client: true } }),
     prisma.client.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.servicePackage.findMany({ where: { isActive: 1 }, orderBy: { name: "asc" } }),
+    prisma.employee.findMany({
+      where: { isActive: 1, rateType: "per_service" },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    }),
   ]);
   if (!svc) notFound();
 
@@ -41,6 +45,11 @@ export default async function EditServicePage({
           label: `${c.deceasedFirstName} ${c.deceasedLastName}`,
         }))}
         packages={packages.map((p) => ({ id: p.id, name: p.name, basePrice: p.basePrice }))}
+        embalmers={embalmers.map((e) => ({
+          id: e.id,
+          label: `${e.lastName}, ${e.firstName}${e.position ? " (" + e.position + ")" : ""}`,
+          defaultFee: e.rateAmount,
+        }))}
         initial={svc!}
         lockedClientId={svc!.clientId}
       />

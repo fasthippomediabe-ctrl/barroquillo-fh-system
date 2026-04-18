@@ -13,11 +13,15 @@ export default async function NewServicePage({
   const sp = await searchParams;
   const lockedClientId = sp.clientId ? Number(sp.clientId) : undefined;
 
-  const [clients, packages] = await Promise.all([
+  const [clients, packages, embalmers] = await Promise.all([
     prisma.client.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.servicePackage.findMany({
       where: { isActive: 1 },
       orderBy: { name: "asc" },
+    }),
+    prisma.employee.findMany({
+      where: { isActive: 1, rateType: "per_service" },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     }),
   ]);
 
@@ -54,6 +58,11 @@ export default async function NewServicePage({
         submitLabel="Create Service"
         clients={clientOpts}
         packages={pkgOpts}
+        embalmers={embalmers.map((e) => ({
+          id: e.id,
+          label: `${e.lastName}, ${e.firstName}${e.position ? " (" + e.position + ")" : ""}`,
+          defaultFee: e.rateAmount,
+        }))}
         lockedClientId={lockedClientId}
       />
     </div>

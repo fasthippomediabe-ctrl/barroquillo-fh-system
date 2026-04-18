@@ -14,6 +14,10 @@ type EmpOpt = {
   position: string | null;
   rateType: string;
   rateAmount: number;
+  /** Total of embalmer fees on services (burial date in period) — for per_service employees. */
+  perServiceFees?: number;
+  /** Human-readable breakdown used as the default earnings note. */
+  perServiceNote?: string;
 };
 
 export default function AddEntryForm({
@@ -41,7 +45,29 @@ export default function AddEntryForm({
   const seed = useMemo(() => {
     const emp = employees.find((e) => String(e.id) === empId);
     if (!emp) return null;
-    const monthly = emp.rateType === "monthly" ? emp.rateAmount : 0;
+
+    if (emp.rateType === "per_service") {
+      return {
+        basicPay: emp.perServiceFees ?? 0,
+        sss: 0,
+        philhealth: 0,
+        pagibig: 0,
+        tax: 0,
+        hint: emp.perServiceNote ?? null,
+      };
+    }
+    if (emp.rateType === "daily" || emp.rateType === "hourly") {
+      return {
+        basicPay: 0,
+        sss: 0,
+        philhealth: 0,
+        pagibig: 0,
+        tax: 0,
+        hint: `Rate: ₱${emp.rateAmount.toFixed(2)} / ${emp.rateType}. Enter basic pay manually.`,
+      };
+    }
+
+    const monthly = emp.rateAmount;
     const sss = monthly > 0 ? computeSss(monthly) : 0;
     const philhealth = monthly > 0 ? computePhilHealth(monthly) : 0;
     const pagibig = monthly > 0 ? computePagIbig(monthly) : 0;
@@ -54,6 +80,7 @@ export default function AddEntryForm({
       philhealth: +(philhealth * scale).toFixed(2),
       pagibig: +(pagibig * scale).toFixed(2),
       tax: +(tax * scale).toFixed(2),
+      hint: null as string | null,
     };
   }, [empId, employees, semi]);
 
@@ -91,10 +118,15 @@ export default function AddEntryForm({
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.label}
-                {e.position ? ` (${e.position})` : ""}
+                {e.position ? ` (${e.position})` : ""} · {e.rateType}
               </option>
             ))}
           </select>
+          {seed?.hint && (
+            <span className="text-xs font-normal text-[var(--brand-blue)]">
+              {seed.hint}
+            </span>
+          )}
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">
           Basic Pay

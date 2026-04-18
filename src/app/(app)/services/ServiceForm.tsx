@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 type ClientOption = { id: number; label: string };
 type PackageOption = { id: number; name: string; basePrice: number };
+type EmbalmerOption = { id: number; label: string; defaultFee: number };
 
 type Initial = {
   clientId?: number;
@@ -16,6 +17,8 @@ type Initial = {
   totalAmount?: number;
   discount?: number;
   notes?: string | null;
+  embalmerId?: number | null;
+  embalmerFee?: number;
 };
 
 export default function ServiceForm({
@@ -23,6 +26,7 @@ export default function ServiceForm({
   submitLabel = "Save",
   clients,
   packages,
+  embalmers = [],
   initial,
   lockedClientId,
 }: {
@@ -30,6 +34,7 @@ export default function ServiceForm({
   submitLabel?: string;
   clients: ClientOption[];
   packages: PackageOption[];
+  embalmers?: EmbalmerOption[];
   initial?: Initial;
   lockedClientId?: number;
 }) {
@@ -41,6 +46,20 @@ export default function ServiceForm({
   const [total, setTotal] = useState<string>(
     initial?.totalAmount != null ? String(initial.totalAmount) : "",
   );
+  const [embalmerId, setEmbalmerId] = useState<string>(
+    initial?.embalmerId != null ? String(initial.embalmerId) : "",
+  );
+  const [embalmerFee, setEmbalmerFee] = useState<string>(
+    initial?.embalmerFee != null ? String(initial.embalmerFee) : "0",
+  );
+
+  const onEmbalmerChange = (v: string) => {
+    setEmbalmerId(v);
+    if (v && !initial) {
+      const emb = embalmers.find((x) => String(x.id) === v);
+      if (emb && emb.defaultFee > 0) setEmbalmerFee(String(emb.defaultFee));
+    }
+  };
 
   const onPkgChange = (v: string) => {
     setPkgId(v);
@@ -167,6 +186,36 @@ export default function ServiceForm({
               type="date"
               defaultValue={v(initial?.burialDate)}
               className="input"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm font-semibold">
+            Embalmer / Per-Service Staff
+            <select
+              name="embalmerId"
+              value={embalmerId}
+              onChange={(e) => onEmbalmerChange(e.target.value)}
+              className="select"
+            >
+              <option value="">— None —</option>
+              {embalmers.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-semibold">
+            Embalmer Fee (₱)
+            <input
+              name="embalmerFee"
+              type="number"
+              step="0.01"
+              min="0"
+              value={embalmerFee}
+              onChange={(e) => setEmbalmerFee(e.target.value)}
+              className="input"
+              disabled={!embalmerId}
             />
           </label>
         </div>

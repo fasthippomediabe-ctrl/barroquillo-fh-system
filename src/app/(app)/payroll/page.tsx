@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { fmt, fmtDate } from "@/lib/format";
+import GenerateCutoffsButton from "./GenerateCutoffsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function PayrollIndex() {
             <Link href="/payroll/calculator" className="btn-secondary">
               Statutory Calculator
             </Link>
+            <GenerateCutoffsButton />
             <Link href="/payroll/new" className="btn-primary">
               + New Period
             </Link>

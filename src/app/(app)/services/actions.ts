@@ -12,6 +12,11 @@ function num(v: FormDataEntryValue | null): number {
   return x === "" ? 0 : Number(x);
 }
 
+function optInt(v: FormDataEntryValue | null): number | null {
+  const x = s(v);
+  return x ? Number(x) : null;
+}
+
 export async function createService(formData: FormData) {
   const clientId = Number(formData.get("clientId"));
   if (!Number.isFinite(clientId)) throw new Error("Client is required");
@@ -29,6 +34,8 @@ export async function createService(formData: FormData) {
       discount: num(formData.get("discount")),
       status: "active",
       notes: s(formData.get("notes")),
+      embalmerId: optInt(formData.get("embalmerId")),
+      embalmerFee: num(formData.get("embalmerFee")),
       createdAt: new Date().toISOString(),
     },
   });
@@ -51,6 +58,8 @@ export async function updateService(id: number, formData: FormData) {
       totalAmount: num(formData.get("totalAmount")),
       discount: num(formData.get("discount")),
       notes: s(formData.get("notes")),
+      embalmerId: optInt(formData.get("embalmerId")),
+      embalmerFee: num(formData.get("embalmerFee")),
     },
   });
   revalidatePath("/services");

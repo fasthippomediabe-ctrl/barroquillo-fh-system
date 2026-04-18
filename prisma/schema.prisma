@@ -82,6 +82,8 @@ model Service {
   discount          Float   @default(0)
   status            String  @default("active")
   notes             String?
+  embalmerId        Int?    @map("embalmer_id")
+  embalmerFee       Float   @default(0) @map("embalmer_fee")
   createdAt         String? @map("created_at")
 
   client             Client              @relation(fields: [clientId], references: [id])
@@ -89,6 +91,7 @@ model Service {
   payments           Payment[]
   expenses           Expense[]
   inventoryMovements InventoryMovement[]
+  embalmer           Employee?           @relation("ServiceEmbalmer", fields: [embalmerId], references: [id])
 
   @@map("services")
 }
@@ -327,7 +330,8 @@ model Employee {
   isActive              Int     @default(1) @map("is_active")
   createdAt             String? @map("created_at")
 
-  payrollEntries PayrollEntry[]
+  payrollEntries      PayrollEntry[]
+  servicesAsEmbalmer  Service[]      @relation("ServiceEmbalmer")
 
   @@map("employees")
 }

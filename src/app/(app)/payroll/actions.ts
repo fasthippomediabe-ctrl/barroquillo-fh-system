@@ -63,6 +63,76 @@ function totals(e: {
   return { grossPay, totalDeductions, netPay };
 }
 
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
+/** Auto-create the 1-15 and 16-end periods for a given YYYY-MM (idempotent). */
+export async function generateCutoffsForMonth(
+  yyyymm: string,
+): Promise<{ error?: string; created?: number; skipped?: number }> {
+  const gate = await checkRole();
+  if (!gate.ok) return { error: gate.error };
+  const m = /^(\d{4})-(\d{2})$/.exec(yyyymm);
+  if (!m) return { error: "Use YYYY-MM format." };
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return { error: "Invalid month." };
+
+  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-PH", {
+    year: "numeric",
+    month: "long",
+  });
+  const lastDay = lastDayOfMonth(year, month);
+  const mm = String(month).padStart(2, "0");
+  const first = {
+    periodName: `${monthLabel} · 1–15`,
+    startDate: `${year}-${mm}-01`,
+    endDate: `${year}-${mm}-15`,
+    payDate: `${year}-${mm}-15`,
+  };
+  const second = {
+    periodName: `${monthLabel} · 16–${lastDay}`,
+    startDate: `${year}-${mm}-16`,
+    endDate: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+    payDate: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+  };
+
+  const existing = await prisma.payrollPeriod.findMany({
+    where: {
+      OR: [
+        { AND: [{ startDate: first.startDate }, { endDate: first.endDate }] },
+        { AND: [{ startDate: second.startDate }, { endDate: second.endDate }] },
+      ],
+    },
+  });
+  const haveFirst = existing.some(
+    (p) => p.startDate === first.startDate && p.endDate === first.endDate,
+  );
+  const haveSecond = existing.some(
+    (p) => p.startDate === second.startDate && p.endDate === second.endDate,
+  );
+
+  const now = new Date().toISOString();
+  let created = 0;
+  let skipped = 0;
+  if (!haveFirst) {
+    await prisma.payrollPeriod.create({
+      data: { ...first, status: "draft", createdAt: now },
+    });
+    created += 1;
+  } else skipped += 1;
+  if (!haveSecond) {
+    await prisma.payrollPeriod.create({
+      data: { ...second, status: "draft", createdAt: now },
+    });
+    created += 1;
+  } else skipped += 1;
+
+  revalidatePath("/payroll");
+  return { created, skipped };
+}
+
 export async function createPeriod(
   formData: FormData,
 ): Promise<{ error?: string }> {
@@ -227,39 +297,33 @@ export async function bulkCreateEntries(
   if (todo.length === 0) return { created: 0 };
 
   const now = new Date().toISOString();
+  const days =
+    (new Date(period.endDate).getTime() -
+      new Date(period.startDate).getTime()) /
+      86400000 +
+    1;
+  const semi = days <= 17;
+
   let created = 0;
   for (const emp of todo) {
-    const monthly = emp.rateType === "monthly" ? emp.rateAmount : 0;
-    const sss = monthly > 0 ? computeSss(monthly) : 0;
-    const philhealth = monthly > 0 ? computePhilHealth(monthly) : 0;
-    const pagibig = monthly > 0 ? computePagIbig(monthly) : 0;
-    const tax = monthly > 0 ? computeWht(monthly, sss, philhealth, pagibig) : 0;
-    // Basic pay seed: semi-monthly = rate / 2 if period looks semi-monthly, else full rate.
-    const days =
-      (new Date(period.endDate).getTime() -
-        new Date(period.startDate).getTime()) /
-        86400000 +
-      1;
-    const semi = days <= 17;
-    const basicPay = monthly > 0 ? (semi ? monthly / 2 : monthly) : 0;
-    const deductionScale = semi ? 0.5 : 1;
+    const seed = await seedForEmployee(emp, period, semi);
     const inputs = {
-      basicPay,
+      basicPay: seed.basicPay,
       overtimePay: 0,
       holidayPay: 0,
       bonus: 0,
       otherEarnings: 0,
-      otherEarningsNote: null,
-      sss: +(sss * deductionScale).toFixed(2),
-      philhealth: +(philhealth * deductionScale).toFixed(2),
-      pagibig: +(pagibig * deductionScale).toFixed(2),
-      tax: +(tax * deductionScale).toFixed(2),
+      otherEarningsNote: seed.earningsNote,
+      sss: seed.sss,
+      philhealth: seed.philhealth,
+      pagibig: seed.pagibig,
+      tax: seed.tax,
       cashAdvance: 0,
       absences: 0,
       lateDeductions: 0,
       otherDeductions: 0,
       otherDeductionsNote: null,
-      notes: null,
+      notes: seed.notes,
       paidVia: null,
       isPaid: 0,
     };
@@ -277,6 +341,89 @@ export async function bulkCreateEntries(
   }
   revalidatePath(`/payroll/${periodId}`);
   return { created };
+}
+
+type EmpForSeed = {
+  id: number;
+  rateType: string;
+  rateAmount: number;
+};
+type PeriodForSeed = {
+  startDate: string;
+  endDate: string;
+};
+
+/** Rate-type aware seed for a new payroll entry. */
+async function seedForEmployee(
+  emp: EmpForSeed,
+  period: PeriodForSeed,
+  semi: boolean,
+): Promise<{
+  basicPay: number;
+  sss: number;
+  philhealth: number;
+  pagibig: number;
+  tax: number;
+  earningsNote: string | null;
+  notes: string | null;
+}> {
+  if (emp.rateType === "per_service") {
+    // Sum embalmer fees for services whose burial date falls inside the period.
+    const services = await prisma.service.findMany({
+      where: {
+        embalmerId: emp.id,
+        AND: [
+          { burialDate: { gte: period.startDate } },
+          { burialDate: { lte: period.endDate } },
+        ],
+      },
+      select: { id: true, embalmerFee: true, burialDate: true },
+    });
+    const basicPay = services.reduce((a, s) => a + (s.embalmerFee ?? 0), 0);
+    return {
+      basicPay,
+      sss: 0,
+      philhealth: 0,
+      pagibig: 0,
+      tax: 0,
+      earningsNote: `${services.length} service${services.length === 1 ? "" : "s"}`,
+      notes: services.length
+        ? `Per-service fees: ${services
+            .map((s) => `${s.burialDate ?? "?"}: ₱${(s.embalmerFee ?? 0).toFixed(2)}`)
+            .join(", ")}`
+        : null,
+    };
+  }
+
+  if (emp.rateType === "daily" || emp.rateType === "hourly") {
+    // Leave blank — user sets days/hours manually.
+    return {
+      basicPay: 0,
+      sss: 0,
+      philhealth: 0,
+      pagibig: 0,
+      tax: 0,
+      earningsNote: null,
+      notes: `Set basic pay manually: rate ₱${emp.rateAmount.toFixed(2)} / ${emp.rateType}.`,
+    };
+  }
+
+  // Default: monthly
+  const monthly = emp.rateAmount;
+  const sss = monthly > 0 ? computeSss(monthly) : 0;
+  const philhealth = monthly > 0 ? computePhilHealth(monthly) : 0;
+  const pagibig = monthly > 0 ? computePagIbig(monthly) : 0;
+  const tax = monthly > 0 ? computeWht(monthly, sss, philhealth, pagibig) : 0;
+  const scale = semi ? 0.5 : 1;
+  return {
+    basicPay: monthly > 0 ? (semi ? monthly / 2 : monthly) : 0,
+    sss: +(sss * scale).toFixed(2),
+    philhealth: +(philhealth * scale).toFixed(2),
+    pagibig: +(pagibig * scale).toFixed(2),
+    tax: +(tax * scale).toFixed(2),
+    earningsNote: null,
+    notes: null,
+  };
 }
 
 export async function toggleEntryPaid(entryId: number): Promise<{ error?: string }> {

@@ -41,6 +41,36 @@ export default async function PeriodDetailPage({
     (e) => !entriedEmployeeIds.has(e.id),
   );
 
+  // Pre-compute per_service fees per employee for services whose burial date
+  // falls inside the period. Lets the client form default basic pay to the
+  // running total of embalmer fees without a round-trip on selection.
+  const perServiceEmpIds = availableEmployees
+    .filter((e) => e.rateType === "per_service")
+    .map((e) => e.id);
+  let perServiceMap = new Map<
+    number,
+    { total: number; items: { date: string | null; fee: number }[] }
+  >();
+  if (perServiceEmpIds.length > 0) {
+    const svcs = await prisma.service.findMany({
+      where: {
+        embalmerId: { in: perServiceEmpIds },
+        AND: [
+          { burialDate: { gte: period.startDate } },
+          { burialDate: { lte: period.endDate } },
+        ],
+      },
+      select: { embalmerId: true, burialDate: true, embalmerFee: true },
+    });
+    for (const s of svcs) {
+      if (s.embalmerId == null) continue;
+      const cur = perServiceMap.get(s.embalmerId) ?? { total: 0, items: [] };
+      cur.total += s.embalmerFee ?? 0;
+      cur.items.push({ date: s.burialDate, fee: s.embalmerFee ?? 0 });
+      perServiceMap.set(s.embalmerId, cur);
+    }
+  }
+
   const totals = period.entries.reduce(
     (a, e) => ({
       gross: a.gross + e.grossPay,
@@ -110,13 +140,20 @@ export default async function PeriodDetailPage({
             periodId={id}
             periodStart={period.startDate}
             periodEnd={period.endDate}
-            employees={availableEmployees.map((e) => ({
-              id: e.id,
-              label: `${e.lastName}, ${e.firstName}${e.middleName ? " " + e.middleName[0] + "." : ""}`,
-              position: e.position,
-              rateType: e.rateType,
-              rateAmount: e.rateAmount,
-            }))}
+            employees={availableEmployees.map((e) => {
+              const ps = perServiceMap.get(e.id);
+              return {
+                id: e.id,
+                label: `${e.lastName}, ${e.firstName}${e.middleName ? " " + e.middleName[0] + "." : ""}`,
+                position: e.position,
+                rateType: e.rateType,
+                rateAmount: e.rateAmount,
+                perServiceFees: ps?.total ?? 0,
+                perServiceNote: ps
+                  ? `${ps.items.length} service${ps.items.length === 1 ? "" : "s"} · ₱${ps.total.toFixed(2)}`
+                  : undefined,
+              };
+            })}
           />
         )}
       </section>

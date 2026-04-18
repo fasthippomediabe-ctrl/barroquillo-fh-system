@@ -96,7 +96,7 @@ export default function EmployeeForm({
             label="Rate Type"
             name="rateType"
             value={v(initial?.rateType ?? "monthly")}
-            options={["monthly", "daily", "hourly"]}
+            options={["monthly", "daily", "hourly", "per_service"]}
           />
           <Field
             label="Rate Amount (₱)"
