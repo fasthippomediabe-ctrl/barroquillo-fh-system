@@ -11,6 +11,7 @@ type Initial = {
   interestRate?: number;
   monthlyPayment?: number;
   dueDate?: string | null;
+  loanDate?: string | null;
   status?: string;
   notes?: string | null;
 };
@@ -121,6 +122,20 @@ export default function LiabilityForm({
             defaultValue={initial?.monthlyPayment ?? 0}
             className="input"
           />
+        </label>
+        <label className="flex flex-col gap-1 text-sm font-semibold">
+          Loan / Cash-Received Date
+          <input
+            name="loanDate"
+            type="date"
+            defaultValue={initial?.loanDate ?? ""}
+            className="input"
+          />
+          <span className="text-xs font-normal text-[#4a5678]">
+            When you actually received the money. Set this to the past for
+            legacy loans (e.g., the 2024 chapel-build loan) so they don&apos;t
+            show up as funding received this month.
+          </span>
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">
           Due Date

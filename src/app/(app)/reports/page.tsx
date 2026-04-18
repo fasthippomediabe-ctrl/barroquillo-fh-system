@@ -72,9 +72,9 @@ export default async function ReportsPage({
     }),
     prisma.liability.findMany({
       where: {
-        createdAt: { gte: start, lte: `${end}T23:59:59` },
+        loanDate: { gte: start, lte: end },
       },
-      orderBy: [{ createdAt: "desc" }],
+      orderBy: [{ loanDate: "desc" }],
     }),
   ]);
 
@@ -306,7 +306,7 @@ export default async function ReportsPage({
               <tbody>
                 {newBorrowingsList.map((l) => (
                   <tr key={l.id}>
-                    <td>{fmtDate(l.createdAt)}</td>
+                    <td>{fmtDate(l.loanDate)}</td>
                     <td className="font-semibold">{l.creditor ?? "—"}</td>
                     <td className="capitalize">
                       {l.type.replace("_", " ")}

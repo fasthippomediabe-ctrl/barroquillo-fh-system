@@ -511,7 +511,7 @@ export default async function AccountingPage({
               <tbody>
                 {data.newBorrowingsList.map((l) => (
                   <tr key={l.id}>
-                    <td>{fmtDate(l.createdAt)}</td>
+                    <td>{fmtDate(l.loanDate)}</td>
                     <td className="font-semibold">{l.creditor ?? "—"}</td>
                     <td className="capitalize">{l.type.replace("_", " ")}</td>
                     <td>{l.name}</td>

@@ -173,7 +173,7 @@ export type AccountingSummary = {
     type: string;
     principalAmount: number;
     remainingBalance: number;
-    createdAt: string | null;
+    loanDate: string | null;
   }[];
 };
 
@@ -236,15 +236,19 @@ export async function getAccountingSummary(
     }),
   ]);
 
-  // New borrowings = liabilities whose createdAt falls inside the period.
-  // These are cash inflows from related entities (e.g. Triple J Corp,
-  // Ascendryx Digital) that plug a deficit in the Company Fund.
-  const newBorrowings = await prisma.liability.findMany({
-    where: dateFilter
-      ? { createdAt: { gte: dateFilter.gte, lte: `${dateFilter.lte}T23:59:59` } }
-      : undefined,
-    orderBy: [{ createdAt: "desc" }],
-  });
+  // New borrowings = liabilities whose loanDate (the day the cash was
+  // actually received) falls inside the period. loanDate MUST be set
+  // explicitly — legacy loans with no loanDate are never counted as
+  // funding received, only as outstanding debt.
+  const newBorrowings = dateFilter
+    ? await prisma.liability.findMany({
+        where: { loanDate: dateFilter },
+        orderBy: [{ loanDate: "desc" }],
+      })
+    : await prisma.liability.findMany({
+        where: { loanDate: { not: null } },
+        orderBy: [{ loanDate: "desc" }],
+      });
 
   const sharesOut = shares.map((s) => ({
     id: s.id,
@@ -351,7 +355,7 @@ export async function getAccountingSummary(
       type: l.type,
       principalAmount: l.principalAmount,
       remainingBalance: l.remainingBalance,
-      createdAt: l.createdAt,
+      loanDate: l.loanDate,
     })),
   };
 }

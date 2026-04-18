@@ -201,6 +201,7 @@ model Liability {
   remainingBalance Float   @map("remaining_balance")
   interestRate     Float   @default(0) @map("interest_rate")
   dueDate          String? @map("due_date")
+  loanDate         String? @map("loan_date")
   monthlyPayment   Float   @default(0) @map("monthly_payment")
   status           String  @default("active")
   notes            String?
