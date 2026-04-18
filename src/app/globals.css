@@ -207,5 +207,38 @@ h3 { color: var(--brand-blue); }
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
-  .card { box-shadow: none; border: 1px solid #ccc; }
+  .card {
+    box-shadow: none;
+    border: 1px solid #ccc;
+    padding: 12px !important;
+    page-break-inside: avoid;
+  }
+  aside.sidebar { display: none !important; }
+  main { padding: 0 !important; max-width: none !important; }
+  .kpi-card {
+    background: #0a1e5e !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    break-inside: avoid;
+  }
+  .kpi-card .kpi-label,
+  .kpi-card .kpi-value,
+  .kpi-card .kpi-delta {
+    color: white !important;
+  }
+  table { page-break-inside: avoid; }
+  h2 {
+    margin-top: 1.2rem !important;
+    page-break-after: avoid;
+  }
+  .break-before-page { break-before: page; page-break-before: always; }
+  a[href] { color: inherit !important; text-decoration: none !important; }
+  .badge {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
 }

@@ -117,6 +117,8 @@ export type AccountingSummary = {
     serviceDirectExpenses: number;
     serviceNet: number;
     overheadExpenses: number;
+    liabilityPayments: number;
+    salariesPaid: number;
   };
   perShareTotals: { shareId: number; name: string; percent: number; amount: number }[];
   companyFund: {
@@ -124,6 +126,8 @@ export type AccountingSummary = {
     name: string;
     grossFromServices: number;
     overheadDeduction: number;
+    liabilityDeduction: number;
+    salaryDeduction: number;
     net: number;
   };
   overheadList: {
@@ -133,6 +137,33 @@ export type AccountingSummary = {
     description: string | null;
     categoryName: string | null;
     reference: string | null;
+  }[];
+  liabilityPaymentsList: {
+    id: number;
+    date: string;
+    amount: number;
+    liabilityName: string;
+    creditor: string | null;
+    notes: string | null;
+  }[];
+  salariesList: {
+    id: number;
+    employeeName: string;
+    position: string | null;
+    periodName: string;
+    payDate: string | null;
+    netPay: number;
+    paidVia: string | null;
+  }[];
+  activeLiabilities: {
+    id: number;
+    name: string;
+    creditor: string | null;
+    type: string;
+    principalAmount: number;
+    remainingBalance: number;
+    dueDate: string | null;
+    status: string;
   }[];
 };
 
@@ -146,7 +177,15 @@ export async function getAccountingSummary(
 ): Promise<AccountingSummary> {
   const dateFilter = dateWhere(period);
 
-  const [shares, serviceRows, overhead, overheadList] = await Promise.all([
+  const [
+    shares,
+    serviceRows,
+    overhead,
+    overheadList,
+    liabilityPayments,
+    paidEntries,
+    activeLiabilities,
+  ] = await Promise.all([
     prisma.profitShare.findMany({
       where: { isActive: 1 },
       orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
@@ -165,6 +204,26 @@ export async function getAccountingSummary(
       include: { category: true },
       orderBy: [{ date: "desc" }, { id: "desc" }],
     }),
+    prisma.liabilityPayment.findMany({
+      where: dateFilter ? { date: dateFilter } : undefined,
+      include: { liability: true },
+      orderBy: [{ date: "desc" }, { id: "desc" }],
+    }),
+    // Salary = payroll entries marked paid, attributed to the period's pay_date
+    prisma.payrollEntry.findMany({
+      where: {
+        isPaid: 1,
+        ...(dateFilter ? { period: { payDate: dateFilter } } : {}),
+      },
+      include: { employee: true, period: true },
+      orderBy: [{ period: { payDate: "desc" } }, { id: "desc" }],
+    }),
+    // Active liabilities with outstanding balance — shown at bottom of report
+    // regardless of period filter so the total debt position is always visible
+    prisma.liability.findMany({
+      where: { status: "active" },
+      orderBy: [{ remainingBalance: "desc" }],
+    }),
   ]);
 
   const sharesOut = shares.map((s) => ({
@@ -181,6 +240,11 @@ export async function getAccountingSummary(
   );
   const serviceNet = serviceRevenue - serviceDirectExpenses;
   const overheadExpenses = overhead._sum.amount ?? 0;
+  const liabilityPaymentsTotal = liabilityPayments.reduce(
+    (a, p) => a + p.amount,
+    0,
+  );
+  const salariesPaidTotal = paidEntries.reduce((a, e) => a + e.netPay, 0);
 
   const perShareTotals = shares.map((sh) => ({
     shareId: sh.id,
@@ -200,7 +264,10 @@ export async function getAccountingSummary(
     name: fundShare?.name ?? "Company Fund",
     grossFromServices: fundGross,
     overheadDeduction: overheadExpenses,
-    net: fundGross - overheadExpenses,
+    liabilityDeduction: liabilityPaymentsTotal,
+    salaryDeduction: salariesPaidTotal,
+    net:
+      fundGross - overheadExpenses - liabilityPaymentsTotal - salariesPaidTotal,
   };
 
   return {
@@ -212,6 +279,8 @@ export async function getAccountingSummary(
       serviceDirectExpenses,
       serviceNet,
       overheadExpenses,
+      liabilityPayments: liabilityPaymentsTotal,
+      salariesPaid: salariesPaidTotal,
     },
     perShareTotals,
     companyFund,
@@ -222,6 +291,33 @@ export async function getAccountingSummary(
       description: e.description,
       categoryName: e.category?.name ?? null,
       reference: e.reference,
+    })),
+    liabilityPaymentsList: liabilityPayments.map((p) => ({
+      id: p.id,
+      date: p.date,
+      amount: p.amount,
+      liabilityName: p.liability.name,
+      creditor: p.liability.creditor,
+      notes: p.notes,
+    })),
+    salariesList: paidEntries.map((e) => ({
+      id: e.id,
+      employeeName: `${e.employee.lastName}, ${e.employee.firstName}`,
+      position: e.employee.position,
+      periodName: e.period.periodName,
+      payDate: e.period.payDate,
+      netPay: e.netPay,
+      paidVia: e.paidVia,
+    })),
+    activeLiabilities: activeLiabilities.map((l) => ({
+      id: l.id,
+      name: l.name,
+      creditor: l.creditor,
+      type: l.type,
+      principalAmount: l.principalAmount,
+      remainingBalance: l.remainingBalance,
+      dueDate: l.dueDate,
+      status: l.status,
     })),
   };
 }
