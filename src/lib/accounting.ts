@@ -119,6 +119,7 @@ export type AccountingSummary = {
     overheadExpenses: number;
     liabilityPayments: number;
     salariesPaid: number;
+    newBorrowings: number;
   };
   perShareTotals: { shareId: number; name: string; percent: number; amount: number }[];
   companyFund: {
@@ -164,6 +165,15 @@ export type AccountingSummary = {
     remainingBalance: number;
     dueDate: string | null;
     status: string;
+  }[];
+  newBorrowingsList: {
+    id: number;
+    name: string;
+    creditor: string | null;
+    type: string;
+    principalAmount: number;
+    remainingBalance: number;
+    createdAt: string | null;
   }[];
 };
 
@@ -226,6 +236,16 @@ export async function getAccountingSummary(
     }),
   ]);
 
+  // New borrowings = liabilities whose createdAt falls inside the period.
+  // These are cash inflows from related entities (e.g. Triple J Corp,
+  // Ascendryx Digital) that plug a deficit in the Company Fund.
+  const newBorrowings = await prisma.liability.findMany({
+    where: dateFilter
+      ? { createdAt: { gte: dateFilter.gte, lte: `${dateFilter.lte}T23:59:59` } }
+      : undefined,
+    orderBy: [{ createdAt: "desc" }],
+  });
+
   const sharesOut = shares.map((s) => ({
     id: s.id,
     name: s.name,
@@ -245,6 +265,10 @@ export async function getAccountingSummary(
     0,
   );
   const salariesPaidTotal = paidEntries.reduce((a, e) => a + e.netPay, 0);
+  const newBorrowingsTotal = newBorrowings.reduce(
+    (a, l) => a + l.principalAmount,
+    0,
+  );
 
   const perShareTotals = shares.map((sh) => ({
     shareId: sh.id,
@@ -281,6 +305,7 @@ export async function getAccountingSummary(
       overheadExpenses,
       liabilityPayments: liabilityPaymentsTotal,
       salariesPaid: salariesPaidTotal,
+      newBorrowings: newBorrowingsTotal,
     },
     perShareTotals,
     companyFund,
@@ -318,6 +343,15 @@ export async function getAccountingSummary(
       remainingBalance: l.remainingBalance,
       dueDate: l.dueDate,
       status: l.status,
+    })),
+    newBorrowingsList: newBorrowings.map((l) => ({
+      id: l.id,
+      name: l.name,
+      creditor: l.creditor,
+      type: l.type,
+      principalAmount: l.principalAmount,
+      remainingBalance: l.remainingBalance,
+      createdAt: l.createdAt,
     })),
   };
 }

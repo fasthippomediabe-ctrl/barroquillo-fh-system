@@ -483,7 +483,61 @@ export default async function AccountingPage({
       </section>
 
       <h2 className="font-bold mb-3 text-lg">
-        8. Debt Position — Active Liabilities
+        8. Funding Sources (new borrowings)
+      </h2>
+      <section className="card mb-6">
+        <p className="text-xs text-[#4a5678] mb-3">
+          New liabilities recorded inside this period — typically cash
+          injected by a related entity (Triple J Corp, Ascendryx Digital)
+          when the Company Fund ran short.
+        </p>
+        {data.newBorrowingsList.length === 0 ? (
+          <p className="text-sm text-[#4a5678]">
+            No new borrowings this period.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Creditor</th>
+                  <th>Type</th>
+                  <th>Name</th>
+                  <th>Received</th>
+                  <th>Still Owed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.newBorrowingsList.map((l) => (
+                  <tr key={l.id}>
+                    <td>{fmtDate(l.createdAt)}</td>
+                    <td className="font-semibold">{l.creditor ?? "—"}</td>
+                    <td className="capitalize">{l.type.replace("_", " ")}</td>
+                    <td>{l.name}</td>
+                    <td className="font-semibold text-[var(--brand-blue)]">
+                      {fmt(l.principalAmount)}
+                    </td>
+                    <td>{fmt(l.remainingBalance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold bg-[var(--brand-bg-alt)]">
+                  <td colSpan={4}>Total Funding Received</td>
+                  <td className="text-[var(--brand-blue)]">
+                    {fmt(data.totals.newBorrowings)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <h2 className="font-bold mb-3 text-lg">
+        9. Debt Position — Active Liabilities
       </h2>
       <section className="card mb-6">
         <p className="text-xs text-[#4a5678] mb-3">

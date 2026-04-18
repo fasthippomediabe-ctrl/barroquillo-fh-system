@@ -31,13 +31,12 @@ export default async function ReportsPage({
   const [
     payments,
     expensesAgg,
-    newServices,
-    completed,
     paymentList,
     expenseList,
     serviceProfits,
     liabilityPayList,
     paidSalaryList,
+    newBorrowingsList,
   ] = await Promise.all([
     prisma.payment.aggregate({
       where: { date: { gte: start, lte: end } },
@@ -48,12 +47,6 @@ export default async function ReportsPage({
       where: { date: { gte: start, lte: end } },
       _sum: { amount: true },
       _count: true,
-    }),
-    prisma.service.count({
-      where: { createdAt: { gte: start, lte: `${end}T23:59:59` } },
-    }),
-    prisma.service.count({
-      where: { status: "completed", burialDate: { gte: start, lte: end } },
     }),
     prisma.payment.findMany({
       where: { date: { gte: start, lte: end } },
@@ -77,6 +70,12 @@ export default async function ReportsPage({
       include: { employee: true, period: true },
       orderBy: [{ period: { payDate: "desc" } }, { id: "desc" }],
     }),
+    prisma.liability.findMany({
+      where: {
+        createdAt: { gte: start, lte: `${end}T23:59:59` },
+      },
+      orderBy: [{ createdAt: "desc" }],
+    }),
   ]);
 
   const revenue = payments._sum.amount ?? 0;
@@ -84,7 +83,12 @@ export default async function ReportsPage({
   const liabilityPayTotal = liabilityPayList.reduce((a, p) => a + p.amount, 0);
   const salariesPaidTotal = paidSalaryList.reduce((a, e) => a + e.netPay, 0);
   const totalOutflows = expenseTotal + liabilityPayTotal + salariesPaidTotal;
-  const net = revenue - totalOutflows;
+  const net = revenue - totalOutflows; // Operating net — can be negative
+  const fundingReceived = newBorrowingsList.reduce(
+    (a, l) => a + l.principalAmount,
+    0,
+  );
+  const cashPosition = net + fundingReceived;
 
   // Liability payments grouped by creditor
   const liabByCreditor = new Map<
@@ -154,38 +158,180 @@ export default async function ReportsPage({
         </button>
       </form>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="kpi-card">
-          <div className="kpi-label">Revenue</div>
+          <div className="kpi-label">Gross Revenue</div>
           <div className="kpi-value">{fmt(revenue)}</div>
           <div className="kpi-delta">{payments._count} payments</div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-label">Expenses</div>
-          <div className="kpi-value">{fmt(expenseTotal)}</div>
-          <div className="kpi-delta">{expensesAgg._count} entries</div>
+          <div className="kpi-label">Total Outflows</div>
+          <div className="kpi-value">{fmt(totalOutflows)}</div>
+          <div className="kpi-delta">exp + liab + salary</div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Liability Pay.</div>
-          <div className="kpi-value">{fmt(liabilityPayTotal)}</div>
-          <div className="kpi-delta">{liabilityPayList.length} payments</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Salaries Paid</div>
-          <div className="kpi-value">{fmt(salariesPaidTotal)}</div>
-          <div className="kpi-delta">{paidSalaryList.length} payouts</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Net (after all)</div>
+        <div
+          className="kpi-card"
+          style={
+            net < 0
+              ? { background: "linear-gradient(135deg, #7a1f1f, #c0392b)" }
+              : undefined
+          }
+        >
+          <div className="kpi-label">Net Income</div>
           <div className="kpi-value">{fmt(net)}</div>
-          <div className="kpi-delta">total out {fmt(totalOutflows)}</div>
+          <div className="kpi-delta">
+            {net < 0 ? "deficit" : "operating profit"}
+          </div>
         </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Services</div>
-          <div className="kpi-value">{newServices}</div>
-          <div className="kpi-delta">{completed} completed</div>
+        <div
+          className="kpi-card"
+          style={
+            cashPosition < 0
+              ? { background: "linear-gradient(135deg, #7a1f1f, #c0392b)" }
+              : undefined
+          }
+        >
+          <div className="kpi-label">Cash Position</div>
+          <div className="kpi-value">{fmt(cashPosition)}</div>
+          <div className="kpi-delta">after {fmt(fundingReceived)} funding</div>
         </div>
       </div>
+
+      <section className="card mb-6">
+        <h2 className="font-bold mb-4">Profit &amp; Loss Statement</h2>
+        <table className="w-full text-sm">
+          <tbody>
+            <tr className="border-b border-[#e5ebf5]">
+              <td className="py-2 pl-2 font-semibold">
+                <span className="text-[#27613a]">+</span> Gross Revenue
+                (service payments received)
+              </td>
+              <td className="py-2 pr-2 text-right font-semibold text-[#27613a]">
+                {fmt(revenue)}
+              </td>
+            </tr>
+            <tr className="border-b border-[#e5ebf5]">
+              <td className="py-2 pl-2">
+                <span className="text-[#c0392b]">−</span> Expenses (all linked
+                + overhead)
+              </td>
+              <td className="py-2 pr-2 text-right text-[#c0392b]">
+                {fmt(expenseTotal)}
+              </td>
+            </tr>
+            <tr className="border-b border-[#e5ebf5]">
+              <td className="py-2 pl-2">
+                <span className="text-[#c0392b]">−</span> Liability Payments
+              </td>
+              <td className="py-2 pr-2 text-right text-[#c0392b]">
+                {fmt(liabilityPayTotal)}
+              </td>
+            </tr>
+            <tr className="border-b-2 border-[var(--brand-navy)]">
+              <td className="py-2 pl-2">
+                <span className="text-[#c0392b]">−</span> Salaries Paid (net)
+              </td>
+              <td className="py-2 pr-2 text-right text-[#c0392b]">
+                {fmt(salariesPaidTotal)}
+              </td>
+            </tr>
+            <tr className="font-bold text-lg bg-[var(--brand-bg-alt)]">
+              <td className="py-3 pl-2">
+                = Net Income {net < 0 ? "(Loss)" : ""}
+              </td>
+              <td
+                className={`py-3 pr-2 text-right ${net < 0 ? "text-[#c0392b]" : "text-[#27613a]"}`}
+              >
+                {fmt(net)}
+              </td>
+            </tr>
+            {fundingReceived > 0 && (
+              <>
+                <tr>
+                  <td className="py-2 pl-2 text-[var(--brand-blue)]">
+                    <span>+</span> Funding Received (new borrowings)
+                  </td>
+                  <td className="py-2 pr-2 text-right font-semibold text-[var(--brand-blue)]">
+                    {fmt(fundingReceived)}
+                  </td>
+                </tr>
+                <tr className="font-bold text-lg bg-[var(--brand-bg-alt)] border-t-2 border-[var(--brand-navy)]">
+                  <td className="py-3 pl-2">= Cash Position</td>
+                  <td
+                    className={`py-3 pr-2 text-right ${cashPosition < 0 ? "text-[#c0392b]" : "text-[#27613a]"}`}
+                  >
+                    {fmt(cashPosition)}
+                  </td>
+                </tr>
+              </>
+            )}
+          </tbody>
+        </table>
+        {net < 0 && fundingReceived === 0 && (
+          <div className="mt-3 text-xs bg-[#fbdcdc] text-[#7a2323] rounded px-3 py-2">
+            <strong>Chapel ran a deficit this month with no funding recorded.</strong>{" "}
+            If you covered the gap from Triple J Corp or Ascendryx Digital,
+            record it as a new{" "}
+            <Link href="/liabilities/new" className="underline font-semibold">
+              liability
+            </Link>{" "}
+            so it shows up here.
+          </div>
+        )}
+      </section>
+
+      <section className="card mb-6">
+        <h2 className="font-bold mb-4">Funding Sources</h2>
+        <p className="text-xs text-[#4a5678] mb-3">
+          New borrowings recorded this month — e.g., Triple J Corp, Ascendryx
+          Digital, or any other creditor — that brought cash into the chapel.
+        </p>
+        {newBorrowingsList.length === 0 ? (
+          <p className="text-sm text-[#4a5678]">
+            No new borrowings recorded this month.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Creditor</th>
+                  <th>Type</th>
+                  <th>Name</th>
+                  <th>Amount Received</th>
+                  <th>Still Owed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {newBorrowingsList.map((l) => (
+                  <tr key={l.id}>
+                    <td>{fmtDate(l.createdAt)}</td>
+                    <td className="font-semibold">{l.creditor ?? "—"}</td>
+                    <td className="capitalize">
+                      {l.type.replace("_", " ")}
+                    </td>
+                    <td>{l.name}</td>
+                    <td className="font-semibold text-[var(--brand-blue)]">
+                      {fmt(l.principalAmount)}
+                    </td>
+                    <td>{fmt(l.remainingBalance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold bg-[var(--brand-bg-alt)]">
+                  <td colSpan={4}>Total Received This Month</td>
+                  <td className="text-[var(--brand-blue)]">
+                    {fmt(fundingReceived)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <section className="card">
