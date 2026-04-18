@@ -36,6 +36,8 @@ export default async function ReportsPage({
     paymentList,
     expenseList,
     serviceProfits,
+    liabilityPayList,
+    paidSalaryList,
   ] = await Promise.all([
     prisma.payment.aggregate({
       where: { date: { gte: start, lte: end } },
@@ -62,11 +64,43 @@ export default async function ReportsPage({
       include: { category: true },
     }),
     getServiceProfits({ kind: "month", yyyymm: month }),
+    prisma.liabilityPayment.findMany({
+      where: { date: { gte: start, lte: end } },
+      include: { liability: true },
+      orderBy: [{ date: "desc" }, { id: "desc" }],
+    }),
+    prisma.payrollEntry.findMany({
+      where: {
+        isPaid: 1,
+        period: { payDate: { gte: start, lte: end } },
+      },
+      include: { employee: true, period: true },
+      orderBy: [{ period: { payDate: "desc" } }, { id: "desc" }],
+    }),
   ]);
 
   const revenue = payments._sum.amount ?? 0;
   const expenseTotal = expensesAgg._sum.amount ?? 0;
-  const net = revenue - expenseTotal;
+  const liabilityPayTotal = liabilityPayList.reduce((a, p) => a + p.amount, 0);
+  const salariesPaidTotal = paidSalaryList.reduce((a, e) => a + e.netPay, 0);
+  const totalOutflows = expenseTotal + liabilityPayTotal + salariesPaidTotal;
+  const net = revenue - totalOutflows;
+
+  // Liability payments grouped by creditor
+  const liabByCreditor = new Map<
+    string,
+    { count: number; total: number }
+  >();
+  for (const p of liabilityPayList) {
+    const key = p.liability.creditor || p.liability.name;
+    const row = liabByCreditor.get(key) ?? { count: 0, total: 0 };
+    row.count += 1;
+    row.total += p.amount;
+    liabByCreditor.set(key, row);
+  }
+  const liabRows = Array.from(liabByCreditor.entries())
+    .map(([creditor, v]) => ({ creditor, ...v }))
+    .sort((a, b) => b.total - a.total);
 
   // Payment method breakdown
   const methodBreakdown = new Map<string, { count: number; total: number }>();
@@ -120,7 +154,7 @@ export default async function ReportsPage({
         </button>
       </form>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
         <div className="kpi-card">
           <div className="kpi-label">Revenue</div>
           <div className="kpi-value">{fmt(revenue)}</div>
@@ -132,8 +166,19 @@ export default async function ReportsPage({
           <div className="kpi-delta">{expensesAgg._count} entries</div>
         </div>
         <div className="kpi-card">
-          <div className="kpi-label">Net</div>
+          <div className="kpi-label">Liability Pay.</div>
+          <div className="kpi-value">{fmt(liabilityPayTotal)}</div>
+          <div className="kpi-delta">{liabilityPayList.length} payments</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Salaries Paid</div>
+          <div className="kpi-value">{fmt(salariesPaidTotal)}</div>
+          <div className="kpi-delta">{paidSalaryList.length} payouts</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Net (after all)</div>
           <div className="kpi-value">{fmt(net)}</div>
+          <div className="kpi-delta">total out {fmt(totalOutflows)}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Services</div>
@@ -216,6 +261,88 @@ export default async function ReportsPage({
                 ))}
               </tbody>
             </table>
+          )}
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <section className="card">
+          <h2 className="font-bold mb-4">Liability Payments by Creditor</h2>
+          {liabRows.length === 0 ? (
+            <p className="text-sm text-[#4a5678]">
+              No liability payments this month.
+            </p>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Creditor</th>
+                  <th>Count</th>
+                  <th>Total</th>
+                  <th>%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liabRows.map((r) => (
+                  <tr key={r.creditor}>
+                    <td>{r.creditor}</td>
+                    <td>{r.count}</td>
+                    <td className="font-semibold">{fmt(r.total)}</td>
+                    <td>
+                      {liabilityPayTotal > 0
+                        ? `${((r.total / liabilityPayTotal) * 100).toFixed(1)}%`
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="font-bold bg-[var(--brand-bg-alt)]">
+                  <td colSpan={2}>Total</td>
+                  <td colSpan={2}>{fmt(liabilityPayTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </section>
+
+        <section className="card">
+          <h2 className="font-bold mb-4">Salaries Paid</h2>
+          {paidSalaryList.length === 0 ? (
+            <p className="text-sm text-[#4a5678]">
+              No salaries paid this month.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Pay Date</th>
+                    <th>Employee</th>
+                    <th>Period</th>
+                    <th>Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paidSalaryList.map((e) => (
+                    <tr key={e.id}>
+                      <td>{fmtDate(e.period.payDate)}</td>
+                      <td className="font-semibold">
+                        {e.employee.lastName}, {e.employee.firstName}
+                      </td>
+                      <td className="text-xs">{e.period.periodName}</td>
+                      <td className="font-semibold">{fmt(e.netPay)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="font-bold bg-[var(--brand-bg-alt)]">
+                    <td colSpan={3}>Total</td>
+                    <td>{fmt(salariesPaidTotal)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           )}
         </section>
       </div>
