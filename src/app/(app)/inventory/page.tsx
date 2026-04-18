@@ -47,6 +47,7 @@ export default async function InventoryPage({
           <table className="table">
             <thead>
               <tr>
+                <th></th>
                 <th>Item</th>
                 <th>Category</th>
                 <th>Location</th>
@@ -61,7 +62,7 @@ export default async function InventoryPage({
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center text-[#4a5678] py-8">
+                  <td colSpan={10} className="text-center text-[#4a5678] py-8">
                     No inventory items. Click <strong>+ New Item</strong>.
                   </td>
                 </tr>
@@ -71,6 +72,18 @@ export default async function InventoryPage({
                     key={i.id}
                     className={i.isActive === 0 ? "opacity-60" : ""}
                   >
+                    <td>
+                      {i.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={i.imageUrl}
+                          alt={i.name}
+                          className="w-12 h-12 object-cover rounded border border-[#e5ebf5]"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded border border-dashed border-[#d6dcec] bg-[var(--brand-bg-alt)]" />
+                      )}
+                    </td>
                     <td className="font-semibold">{i.name}</td>
                     <td>{i.category?.name ?? "—"}</td>
                     <td>{i.location ?? "—"}</td>

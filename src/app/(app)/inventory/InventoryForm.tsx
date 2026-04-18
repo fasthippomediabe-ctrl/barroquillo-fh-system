@@ -14,6 +14,8 @@ type Initial = {
   costPerUnit?: number;
   sellingPrice?: number;
   location?: string | null;
+  imageUrl?: string | null;
+  imageFilename?: string | null;
 };
 
 export default function InventoryForm({
@@ -44,6 +46,7 @@ export default function InventoryForm({
         })
       }
       className="flex flex-col gap-4"
+      encType="multipart/form-data"
     >
       <div className="card grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-sm font-semibold md:col-span-2">
@@ -160,6 +163,41 @@ export default function InventoryForm({
             className="textarea"
           />
         </label>
+
+        <div className="flex flex-col gap-2 text-sm font-semibold md:col-span-2">
+          <span>Item Image</span>
+          {initial?.imageUrl && (
+            <div className="flex items-center gap-4 bg-[var(--brand-bg-alt)] rounded-lg p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={initial.imageUrl}
+                alt={initial?.imageFilename ?? "Current image"}
+                className="w-24 h-24 object-cover rounded border border-[#e5ebf5]"
+              />
+              <div className="flex-1">
+                <div className="text-xs text-[#4a5678] font-normal">
+                  Current: {initial.imageFilename ?? "image"}
+                </div>
+                <label className="flex items-center gap-1 text-xs font-normal text-[#c0392b] mt-1">
+                  <input type="checkbox" name="removeImage" value="1" />
+                  Remove on save
+                </label>
+              </div>
+            </div>
+          )}
+          <label className="flex flex-col gap-1 font-normal">
+            <span className="text-xs text-[#4a5678]">
+              JPG / PNG / WebP / HEIC, up to 4 MB. Picking a new file replaces
+              the existing image.
+            </span>
+            <input
+              type="file"
+              name="image"
+              accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+              className="input !py-1.5"
+            />
+          </label>
+        </div>
       </div>
 
       {err && (

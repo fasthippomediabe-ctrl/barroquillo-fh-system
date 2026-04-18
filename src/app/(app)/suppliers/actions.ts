@@ -8,7 +8,7 @@ async function checkRole(): Promise<{ ok: true } | { ok: false; error: string }>
   const session = await auth();
   // biome-ignore lint/suspicious/noExplicitAny: session
   const role = (session?.user as any)?.role ?? "staff";
-  if (!["admin", "manager", "accounting"].includes(role))
+  if (!["admin", "manager", "accounting", "staff"].includes(role))
     return { ok: false, error: "You don't have permission for this." };
   return { ok: true };
 }
