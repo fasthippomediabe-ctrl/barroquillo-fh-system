@@ -467,7 +467,6 @@ function HowTo({
         <Link
           href={path}
           className="text-[var(--brand-blue)] hover:underline text-xs font-normal"
-          onClick={(e) => e.stopPropagation()}
         >
           Open →
         </Link>
