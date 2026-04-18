@@ -1,6 +1,10 @@
 "use client";
 import { useState } from "react";
-import { ALLOWED_ACCEPT } from "@/lib/attachments";
+
+// Mirror of src/lib/attachments.ts — duplicated here because that module
+// imports Prisma (server-only) and cannot be pulled into a client bundle.
+const ALLOWED_ACCEPT =
+  "image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf";
 
 export type AttachmentLite = {
   id: number;
