@@ -14,6 +14,7 @@ import {
   UserCircle,
   IdCard,
   Scale,
+  BookOpen,
 } from "lucide-react";
 
 export type NavItem = {
@@ -39,4 +40,5 @@ export const nav: NavItem[] = [
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/admin", label: "Admin Panel", icon: Shield, roles: ["admin"] },
   { href: "/profile", label: "My Profile", icon: UserCircle },
+  { href: "/guide", label: "How to Use", icon: BookOpen },
 ];
