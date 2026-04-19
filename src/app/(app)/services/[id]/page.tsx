@@ -46,6 +46,9 @@ export default async function ServiceDetailPage({
             <Link href={`/services/${id}/edit`} className="btn-secondary">
               Edit
             </Link>
+            <Link href={`/services/${id}/report`} className="btn-secondary">
+              Service Report
+            </Link>
             <PrintButton />
             <StatusActions id={id} currentStatus={svc.status} />
           </>
