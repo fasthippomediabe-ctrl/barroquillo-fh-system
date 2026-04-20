@@ -76,7 +76,7 @@ export default function LiabilityForm({
           />
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">
-          Principal Amount (₱) *
+          Amount Borrowed / Principal (₱) *
           <input
             name="principalAmount"
             type="number"
@@ -86,9 +86,12 @@ export default function LiabilityForm({
             required
             className="input"
           />
+          <span className="text-xs font-normal text-[#4a5678]">
+            The original amount you received. Never changes.
+          </span>
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">
-          Remaining Balance (₱)
+          Still Owed / Remaining Balance (₱)
           <input
             name="remainingBalance"
             type="number"
@@ -98,8 +101,13 @@ export default function LiabilityForm({
               initial?.remainingBalance ?? initial?.principalAmount ?? ""
             }
             className="input"
-            placeholder={isNew ? "Defaults to principal" : undefined}
+            placeholder={isNew ? "Leave blank = same as borrowed" : undefined}
           />
+          <span className="text-xs font-normal text-[#4a5678]">
+            {isNew
+              ? "For a brand-new loan, leave blank — it starts equal to the amount borrowed."
+              : "For a legacy loan you've been paying down, enter what's still outstanding today. Future payments will decrease this automatically."}
+          </span>
         </label>
         <label className="flex flex-col gap-1 text-sm font-semibold">
           Interest Rate (%)
