@@ -16,7 +16,48 @@ model User {
   isActive     Int     @default(1) @map("is_active")
   createdAt    String? @map("created_at")
 
+  requestedBranchRequests BranchRequest[] @relation("BranchRequestRequester")
+  reviewedBranchRequests  BranchRequest[] @relation("BranchRequestReviewer")
+  releasedBranchRequests  BranchRequest[] @relation("BranchRequestReleaser")
+
   @@map("users")
+}
+
+model BranchRequest {
+  id                          Int     @id @default(autoincrement())
+  type                        String  // 'expense' | 'liability_payment'
+  status                      String  @default("pending") // pending | approved | rejected | released | cancelled
+  amount                      Float
+  description                 String?
+  justification               String?
+  neededByDate                String? @map("needed_by_date")
+  categoryId                  Int?    @map("category_id")
+  accountId                   Int?    @map("account_id")
+  serviceId                   Int?    @map("service_id")
+  liabilityId                 Int?    @map("liability_id")
+  reference                   String?
+  requestedByUserId           Int     @map("requested_by_user_id")
+  requestedAt                 String? @map("requested_at")
+  reviewerUserId              Int?    @map("reviewer_user_id")
+  reviewedAt                  String? @map("reviewed_at")
+  reviewNotes                 String? @map("review_notes")
+  releasedByUserId            Int?    @map("released_by_user_id")
+  releasedAt                  String? @map("released_at")
+  resultingExpenseId          Int?    @map("resulting_expense_id")
+  resultingLiabilityPaymentId Int?    @map("resulting_liability_payment_id")
+  createdAt                   String? @map("created_at")
+
+  requestedBy User  @relation("BranchRequestRequester", fields: [requestedByUserId], references: [id])
+  reviewer    User? @relation("BranchRequestReviewer", fields: [reviewerUserId], references: [id])
+  releasedBy  User? @relation("BranchRequestReleaser", fields: [releasedByUserId], references: [id])
+  category    ExpenseCategory? @relation(fields: [categoryId], references: [id])
+  account     Account?         @relation(fields: [accountId], references: [id])
+  service     Service?         @relation(fields: [serviceId], references: [id])
+  liability   Liability?       @relation(fields: [liabilityId], references: [id])
+
+  @@index([status])
+  @@index([requestedByUserId])
+  @@map("branch_requests")
 }
 
 model Account {
@@ -28,7 +69,8 @@ model Account {
   isActive       Int     @default(1) @map("is_active")
   createdAt      String? @map("created_at")
 
-  expenses Expense[]
+  expenses        Expense[]
+  branchRequests  BranchRequest[]
 
   @@map("accounts")
 }
@@ -92,6 +134,7 @@ model Service {
   expenses           Expense[]
   inventoryMovements InventoryMovement[]
   embalmer           Employee?           @relation("ServiceEmbalmer", fields: [embalmerId], references: [id])
+  branchRequests     BranchRequest[]
 
   @@map("services")
 }
@@ -117,7 +160,8 @@ model ExpenseCategory {
   color    String @default("#6c757d")
   isActive Int    @default(1) @map("is_active")
 
-  expenses Expense[]
+  expenses       Expense[]
+  branchRequests BranchRequest[]
 
   @@map("expense_categories")
 }
@@ -207,7 +251,8 @@ model Liability {
   notes            String?
   createdAt        String? @map("created_at")
 
-  payments LiabilityPayment[]
+  payments       LiabilityPayment[]
+  branchRequests BranchRequest[]
 
   @@map("liabilities")
 }

@@ -13,7 +13,11 @@ export const ALLOWED_ATTACHMENT_TYPES = new Set([
 export const ALLOWED_ACCEPT =
   "image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf";
 
-type EntityType = "expense" | "liability_payment" | "payment";
+type EntityType =
+  | "expense"
+  | "liability_payment"
+  | "payment"
+  | "branch_request";
 
 function prefixFor(entityType: EntityType): string {
   switch (entityType) {
@@ -23,6 +27,8 @@ function prefixFor(entityType: EntityType): string {
       return "receipts/liabilities";
     case "payment":
       return "receipts/payments";
+    case "branch_request":
+      return "receipts/requests";
   }
 }
 

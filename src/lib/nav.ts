@@ -15,6 +15,7 @@ import {
   IdCard,
   Scale,
   BookOpen,
+  ClipboardList,
 } from "lucide-react";
 
 export type NavItem = {
@@ -32,6 +33,7 @@ export const nav: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/suppliers", label: "Suppliers", icon: Truck },
   { href: "/expenses", label: "Expenses", icon: Receipt },
+  { href: "/requests", label: "Branch Requests", icon: ClipboardList },
   { href: "/employees", label: "Employees", icon: IdCard, roles: ["admin", "manager", "hr"] },
   { href: "/payroll", label: "Payroll", icon: Banknote, roles: ["admin", "manager", "hr"] },
   { href: "/liabilities", label: "Liabilities", icon: CircleDollarSign, roles: ["admin", "manager"] },
