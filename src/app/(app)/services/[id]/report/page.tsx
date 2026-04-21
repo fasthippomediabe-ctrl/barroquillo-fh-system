@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { PageHeader, BackLink } from "@/components/PageHeader";
 import { fmt, fmtDate } from "@/lib/format";
 import PrintButton from "@/components/PrintButton";
 import { listAttachmentsMany } from "@/lib/attachments";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,14 @@ export default async function ServiceReportPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await auth();
+  // biome-ignore lint/suspicious/noExplicitAny: session
+  const role = (session?.user as any)?.role;
+  if (!["admin", "accounting"].includes(role)) {
+    const { id: idStr } = await params;
+    redirect(`/services/${idStr}`);
+  }
+
   const { id: idStr } = await params;
   const id = Number(idStr);
   if (!Number.isFinite(id)) notFound();

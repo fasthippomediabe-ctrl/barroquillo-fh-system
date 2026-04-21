@@ -234,13 +234,19 @@ export default async function AccountingPage({
                   <tr key={r.serviceId}>
                     <td>
                       <Link
-                        href={`/services/${r.serviceId}`}
+                        href={`/services/${r.serviceId}/report`}
                         className="text-[var(--brand-navy)] font-semibold hover:underline print:no-underline"
                       >
                         {r.clientName}
                       </Link>
                       <div className="text-xs text-[#4a5678]">
-                        {r.packageName ?? "Custom"}
+                        {r.packageName ?? "Custom"}{" "}
+                        <Link
+                          href={`/services/${r.serviceId}/report`}
+                          className="text-[var(--brand-blue)] hover:underline no-print ml-1"
+                        >
+                          · Report →
+                        </Link>
                       </div>
                     </td>
                     <td>{fmtDate(r.burialDate)}</td>

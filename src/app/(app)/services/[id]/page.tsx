@@ -8,6 +8,7 @@ import PaymentForm from "./PaymentForm";
 import StatusActions from "./StatusActions";
 import DeletePaymentButton from "./DeletePaymentButton";
 import PrintButton from "@/components/PrintButton";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,13 @@ export default async function ServiceDetailPage({
   const { id: idStr } = await params;
   const id = Number(idStr);
   if (!Number.isFinite(id)) notFound();
+
+  const session = await auth();
+  // biome-ignore lint/suspicious/noExplicitAny: session
+  const canSeeReport = ["admin", "accounting"].includes(
+    // biome-ignore lint/suspicious/noExplicitAny: session
+    (session?.user as any)?.role,
+  );
 
   const svc = await prisma.service.findUnique({
     where: { id },
@@ -46,9 +54,11 @@ export default async function ServiceDetailPage({
             <Link href={`/services/${id}/edit`} className="btn-secondary">
               Edit
             </Link>
-            <Link href={`/services/${id}/report`} className="btn-secondary">
-              Service Report
-            </Link>
+            {canSeeReport && (
+              <Link href={`/services/${id}/report`} className="btn-secondary">
+                Service Report
+              </Link>
+            )}
             <PrintButton />
             <StatusActions id={id} currentStatus={svc.status} />
           </>
