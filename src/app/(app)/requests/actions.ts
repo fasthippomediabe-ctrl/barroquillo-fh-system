@@ -378,3 +378,54 @@ export async function deleteRequest(
   bump();
   redirect("/requests");
 }
+
+/** Post a comment on a request. Visible to anyone with access to the request. */
+export async function postComment(
+  requestId: number,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const me = await getSession();
+  if (!me) return { error: "Not signed in." };
+  const message = s(formData.get("message"));
+  if (!message) return { error: "Type a message first." };
+  if (message.length > 2000)
+    return { error: "Message is too long (2000 characters max)." };
+
+  const r = await prisma.branchRequest.findUnique({
+    where: { id: requestId },
+    select: { id: true, requestedByUserId: true },
+  });
+  if (!r) return { error: "Request not found." };
+  const isOwner = r.requestedByUserId === me.id;
+  if (!isOwner && !canReview(me.role) && me.role !== "manager")
+    return { error: "You don't have access to this request." };
+
+  await prisma.requestComment.create({
+    data: {
+      requestId,
+      userId: me.id,
+      message,
+      createdAt: new Date().toISOString(),
+    },
+  });
+  bump(requestId);
+  return {};
+}
+
+/** Delete own comment (or admin override). */
+export async function deleteComment(
+  commentId: number,
+): Promise<{ error?: string }> {
+  const me = await getSession();
+  if (!me) return { error: "Not signed in." };
+  const c = await prisma.requestComment.findUnique({
+    where: { id: commentId },
+    select: { id: true, userId: true, requestId: true },
+  });
+  if (!c) return { error: "Comment not found." };
+  if (c.userId !== me.id && me.role !== "admin")
+    return { error: "You can only delete your own comments." };
+  await prisma.requestComment.delete({ where: { id: commentId } });
+  bump(c.requestId);
+  return {};
+}

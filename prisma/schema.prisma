@@ -19,6 +19,7 @@ model User {
   requestedBranchRequests BranchRequest[] @relation("BranchRequestRequester")
   reviewedBranchRequests  BranchRequest[] @relation("BranchRequestReviewer")
   releasedBranchRequests  BranchRequest[] @relation("BranchRequestReleaser")
+  requestComments         RequestComment[]
 
   @@map("users")
 }
@@ -54,10 +55,25 @@ model BranchRequest {
   account     Account?         @relation(fields: [accountId], references: [id])
   service     Service?         @relation(fields: [serviceId], references: [id])
   liability   Liability?       @relation(fields: [liabilityId], references: [id])
+  comments    RequestComment[]
 
   @@index([status])
   @@index([requestedByUserId])
   @@map("branch_requests")
+}
+
+model RequestComment {
+  id        Int     @id @default(autoincrement())
+  requestId Int     @map("request_id")
+  userId    Int     @map("user_id")
+  message   String
+  createdAt String? @map("created_at")
+
+  request BranchRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id])
+
+  @@index([requestId])
+  @@map("request_comments")
 }
 
 model Account {
