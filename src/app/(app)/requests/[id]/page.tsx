@@ -7,6 +7,8 @@ import { fmt, fmtDate } from "@/lib/format";
 import { listAttachments } from "@/lib/attachments";
 import ReviewActions from "./ReviewActions";
 import CancelButton from "./CancelButton";
+import CommentThread from "./CommentThread";
+import DeleteRequestButton from "./DeleteRequestButton";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +39,7 @@ export default async function RequestDetailPage({
 
   const canReview = me.role === "admin" || me.role === "accounting";
 
-  const [r, attachments] = await Promise.all([
+  const [r, attachments, comments] = await Promise.all([
     prisma.branchRequest.findUnique({
       where: { id },
       include: {
@@ -51,10 +53,22 @@ export default async function RequestDetailPage({
       },
     }),
     listAttachments("branch_request", id),
+    prisma.requestComment.findMany({
+      where: { requestId: id },
+      include: { user: true },
+      orderBy: { id: "asc" },
+    }),
   ]);
   if (!r) notFound();
 
   const isOwner = r.requestedByUserId === me.id;
+  const isAdmin = me.role === "admin";
+  const canComment = isOwner || canReview || me.role === "manager";
+  const canDelete =
+    isAdmin &&
+    (r.status === "cancelled" ||
+      r.status === "rejected" ||
+      r.status === "pending");
 
   return (
     <div>
@@ -70,8 +84,17 @@ export default async function RequestDetailPage({
               {r.status}
             </span>
             {r.status === "pending" && isOwner && (
-              <CancelButton id={r.id} />
+              <>
+                <Link
+                  href={`/requests/${r.id}/edit`}
+                  className="btn-secondary"
+                >
+                  Edit Request
+                </Link>
+                <CancelButton id={r.id} />
+              </>
             )}
+            {canDelete && <DeleteRequestButton id={r.id} />}
           </>
         }
       />
@@ -243,6 +266,23 @@ export default async function RequestDetailPage({
           />
         </section>
       )}
+
+      <CommentThread
+        requestId={r.id}
+        comments={comments.map((c) => ({
+          id: c.id,
+          message: c.message,
+          createdAt: c.createdAt,
+          user: {
+            id: c.user.id,
+            displayName: c.user.displayName,
+            role: c.user.role,
+          },
+        }))}
+        canComment={canComment}
+        currentUserId={me.id}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }
