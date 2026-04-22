@@ -4,10 +4,16 @@ import { PageHeader } from "@/components/PageHeader";
 import { fmt, fmtDate } from "@/lib/format";
 import RowActions from "./RowActions";
 import { listAttachmentsMany } from "@/lib/attachments";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExpensesPage() {
+  const session = await auth();
+  // biome-ignore lint/suspicious/noExplicitAny: session
+  const role = (session?.user as any)?.role ?? "staff";
+  const canDirectCreate = ["admin", "manager", "accounting"].includes(role);
+
   const expenses = await prisma.expense.findMany({
     include: {
       category: true,
@@ -29,9 +35,19 @@ export default async function ExpensesPage() {
         title="Expenses"
         subtitle={`Latest 200 entries · ${fmt(total)}`}
         actions={
-          <Link href="/expenses/new" className="btn-primary">
-            + New Expense
-          </Link>
+          canDirectCreate ? (
+            <Link href="/expenses/new" className="btn-primary">
+              + New Expense
+            </Link>
+          ) : (
+            <Link
+              href="/requests/new?type=expense"
+              className="btn-primary"
+              title="Branch staff must submit expenses as requests for accounting to review and release"
+            >
+              + Submit Expense Request
+            </Link>
+          )
         }
       />
       <div className="card p-0 overflow-hidden">

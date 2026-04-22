@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader, BackLink } from "@/components/PageHeader";
 import ExpenseForm from "../../ExpenseForm";
 import { updateExpense } from "../../actions";
 import { listAttachments } from "@/lib/attachments";
+import { auth } from "@/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,11 @@ export default async function EditExpensePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await auth();
+  // biome-ignore lint/suspicious/noExplicitAny: session
+  const role = (session?.user as any)?.role ?? "staff";
+  if (!["admin", "manager", "accounting"].includes(role)) redirect("/expenses");
+
   const { id: idStr } = await params;
   const id = Number(idStr);
   if (!Number.isFinite(id)) notFound();
